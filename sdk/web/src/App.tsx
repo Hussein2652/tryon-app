@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, useMemo, useState } from "react";
-import { recommendSize, requestTryOn, deleteTryOn, SizeRecommendPayload } from "./api";
+import { recommendSize, requestTryOn, requestTryOnCompare, deleteTryOn, SizeRecommendPayload } from "./api";
 
 const DEFAULT_SIZE_PAYLOAD: SizeRecommendPayload = {
   brand_id: "ACME",
@@ -27,6 +27,12 @@ export default function App() {
     images: string[];
     confidence: number;
     frameScores: number[];
+  } | null>(null);
+  const [compareResult, setCompareResult] = useState<{
+    sizeA: string;
+    sizeB: string;
+    setA: { cacheKey: string; images: string[]; frameScores: number[]; confidence: number };
+    setB: { cacheKey: string; images: string[]; frameScores: number[]; confidence: number };
   } | null>(null);
   const [tryOnLoading, setTryOnLoading] = useState(false);
   const [tryOnIssues, setTryOnIssues] = useState<string | null>(null);
@@ -81,6 +87,45 @@ export default function App() {
     }
   };
 
+  const handleCompare = async () => {
+    if (!userFile || !garmentFile || !sizeResult) return;
+    const recommended = (sizeResult as any)?.recommended_size as string | undefined;
+    const nearestAlt = (sizeResult as any)?.nearest_alt?.size as string | undefined;
+    if (!recommended || !nearestAlt) return;
+    setTryOnLoading(true);
+    setTryOnIssues(null);
+    try {
+      const formData = new FormData();
+      formData.append("user_photo", userFile);
+      formData.append("garment_front", garmentFile);
+      formData.append("sku", "SKU123");
+      formData.append("size_a", String(recommended));
+      formData.append("size_b", String(nearestAlt));
+      const data = await requestTryOnCompare(formData);
+      setCompareResult({
+        sizeA: data.size_a,
+        sizeB: data.size_b,
+        setA: {
+          cacheKey: data.set_a.cache_key,
+          images: data.set_a.images,
+          frameScores: data.set_a.frame_scores,
+          confidence: data.set_a.confidence_avg
+        },
+        setB: {
+          cacheKey: data.set_b.cache_key,
+          images: data.set_b.images,
+          frameScores: data.set_b.frame_scores,
+          confidence: data.set_b.confidence_avg
+        }
+      });
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail;
+      setTryOnIssues(detail ?? "Compare sizes request failed");
+    } finally {
+      setTryOnLoading(false);
+    }
+  };
+
   const handleDeleteCache = async () => {
     if (!tryOnResult) return;
     await deleteTryOn(tryOnResult.cacheKey);
@@ -102,6 +147,28 @@ export default function App() {
       <section className="panel">
         <h2>1. Size Recommendation</h2>
         <form onSubmit={handleSizeSubmit} className="form-row">
+          <label>
+            Category
+            <select
+              value={sizePayload.category}
+              onChange={(e) => setSizePayload((prev) => ({ ...prev, category: e.target.value }))}
+            >
+              <option value="upper_top">Upper Top</option>
+              <option value="bottoms">Bottoms</option>
+              <option value="dress">Dress</option>
+            </select>
+          </label>
+          <label>
+            Fit
+            <select
+              value={sizePayload.fit}
+              onChange={(e) => setSizePayload((prev) => ({ ...prev, fit: e.target.value }))}
+            >
+              <option value="regular">Regular</option>
+              <option value="slim">Slim</option>
+              <option value="relaxed">Relaxed</option>
+            </select>
+          </label>
           <label>
             Chest (cm)
             <input
@@ -138,7 +205,14 @@ export default function App() {
         </form>
         {sizeError && <div className="issues">{sizeError}</div>}
         {sizeResult && (
-          <pre>{JSON.stringify(sizeResult, null, 2)}</pre>
+          <div>
+            <pre>{JSON.stringify(sizeResult, null, 2)}</pre>
+            {(sizeResult as any)?.two_size_preview && (
+              <button type="button" onClick={handleCompare} disabled={tryOnLoading}>
+                {tryOnLoading ? "Comparing…" : "Compare recommended vs nearest"}
+              </button>
+            )}
+          </div>
         )}
       </section>
 
@@ -173,6 +247,39 @@ export default function App() {
                   <span>Frame score: {tryOnResult.frameScores[idx].toFixed(2)}</span>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+        {compareResult && (
+          <div>
+            <h3>Two-size preview: {compareResult.sizeA} vs {compareResult.sizeB}</h3>
+            <div className="form-row">
+              <div style={{ flex: 1 }}>
+                <p>
+                  {compareResult.sizeA} · Cache: {compareResult.setA.cacheKey} · Conf: {compareResult.setA.confidence.toFixed(2)}
+                </p>
+                <div className="poses">
+                  {compareResult.setA.images.map((img, idx) => (
+                    <div className="pose-card" key={img}>
+                      <img src={img} alt={`A Pose ${idx + 1}`} />
+                      <span>Score: {compareResult.setA.frameScores[idx].toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <p>
+                  {compareResult.sizeB} · Cache: {compareResult.setB.cacheKey} · Conf: {compareResult.setB.confidence.toFixed(2)}
+                </p>
+                <div className="poses">
+                  {compareResult.setB.images.map((img, idx) => (
+                    <div className="pose-card" key={img}>
+                      <img src={img} alt={`B Pose ${idx + 1}`} />
+                      <span>Score: {compareResult.setB.frameScores[idx].toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}

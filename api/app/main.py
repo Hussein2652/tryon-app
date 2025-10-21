@@ -159,6 +159,65 @@ async def tryon_preview(
     return JSONResponse(status_code=status.HTTP_200_OK, content=payload)
 
 
+@app.post("/tryon/compare")
+async def tryon_compare(
+    user_photo: UploadFile = File(...),
+    garment_front: UploadFile = File(...),
+    garment_mask: Optional[UploadFile] = File(default=None),
+    sku: Optional[str] = Form(default=None),
+    size_a: str = Form(...),
+    size_b: str = Form(...),
+    pose_set: Optional[str] = Form(default=None),
+    pipeline: TryOnPipeline = Depends(get_tryon_pipeline),
+):
+    user_photo_bytes = await user_photo.read()
+    garment_front_bytes = await garment_front.read()
+    garment_mask_bytes = await garment_mask.read() if garment_mask else None
+
+    if not user_photo_bytes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="user_photo is empty.")
+    if not garment_front_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="garment_front is empty.",
+        )
+
+    result_a = pipeline.run(
+        user_photo=user_photo_bytes,
+        garment_front=garment_front_bytes,
+        garment_mask=garment_mask_bytes,
+        sku=sku,
+        size=size_a,
+        pose_set=pose_set,
+    )
+    result_b = pipeline.run(
+        user_photo=user_photo_bytes,
+        garment_front=garment_front_bytes,
+        garment_mask=garment_mask_bytes,
+        sku=sku,
+        size=size_b,
+        pose_set=pose_set,
+    )
+
+    def payload_from(result):
+        return {
+            "cache_key": result.cache_key,
+            "images": [f"/outputs/{p.name}" for p in result.image_paths],
+            "frame_scores": result.frame_scores,
+            "confidence_avg": round(result.confidence_avg, 2),
+        }
+
+    payload = {
+        "ok": True,
+        "size_a": size_a,
+        "size_b": size_b,
+        "set_a": payload_from(result_a),
+        "set_b": payload_from(result_b),
+        "count": max(len(result_a.image_paths), len(result_b.image_paths)),
+    }
+    return JSONResponse(status_code=status.HTTP_200_OK, content=payload)
+
+
 def _safe_output_path(path_str: str) -> Optional[Path]:
     path = Path(path_str)
     try:

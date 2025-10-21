@@ -40,3 +40,19 @@ export async function deleteTryOn(cacheKey: string) {
   const response = await axios.delete(`/tryon/${cacheKey}`);
   return response.data;
 }
+
+export interface TryOnCompareResponse {
+  ok: boolean;
+  size_a: string;
+  size_b: string;
+  set_a: { cache_key: string; images: string[]; frame_scores: number[]; confidence_avg: number };
+  set_b: { cache_key: string; images: string[]; frame_scores: number[]; confidence_avg: number };
+  count: number;
+}
+
+export async function requestTryOnCompare(formData: FormData): Promise<TryOnCompareResponse> {
+  const response = await axios.post("/tryon/compare", formData, {
+    headers: { "Content-Type": "multipart/form-data" }
+  });
+  return response.data;
+}
