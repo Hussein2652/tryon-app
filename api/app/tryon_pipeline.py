@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 from .config import ENGINE_MODE, OUTPUTS_DIR
 from .utils import stable_content_hash
@@ -216,12 +216,16 @@ class TryOnPipeline:
         lines.append(f"Engine {ENGINE_PLACEHOLDER}")
 
         y = 150
+        font = ImageFont.load_default()
         for line in lines:
-            text_width, text_height = draw.textsize(line)
+            bbox = draw.textbbox((0, 0), line, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
             draw.text(
                 ((image.width - text_width) / 2, y),
                 line,
                 fill=(255, 255, 255),
+                font=font,
             )
             y += text_height + 20
 

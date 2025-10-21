@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -100,8 +100,8 @@ class SizeRecommendResponse(BaseModel):
     ok: bool = True
     recommended_size: str
     target_half_cm: float
-    chosen: Dict[str, float]
-    nearest_alt: Optional[Dict[str, float]] = None
+    chosen: Dict[str, Any]
+    nearest_alt: Optional[Dict[str, Any]] = None
     two_size_preview: bool
     category: str
     fit: str
