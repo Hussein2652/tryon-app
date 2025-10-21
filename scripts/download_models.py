@@ -18,6 +18,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
+import urllib.request
 
 
 try:
@@ -71,11 +72,28 @@ def download_with_hf(repo_id: str, filename: str, destination: Path) -> None:
     shutil.copy2(cached, destination)
 
 
+def download_http(url: str, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with urllib.request.urlopen(url) as resp, open(destination, "wb") as f:
+        shutil.copyfileobj(resp, f)
+
+
 def download_controlnet_openpose() -> DownloadTask:
     dest = CONTROLNET_DIR / "control_v11p_sd15_openpose.safetensors"
 
     def action() -> None:
-        download_with_hf("lllyasviel/control_v11p_sd15_openpose", "control_v11p_sd15_openpose.safetensors", dest)
+        url = os.environ.get(
+            "CONTROLNET_OPENPOSE_URL",
+            "",
+        )
+        if url:
+            download_http(url, dest)
+        else:
+            download_with_hf(
+                "lllyasviel/control_v11p_sd15_openpose",
+                "control_v11p_sd15_openpose.safetensors",
+                dest,
+            )
 
     return DownloadTask("ControlNet OpenPose", dest, action)
 
@@ -126,9 +144,13 @@ def download_antelopev2() -> DownloadTask:
 
 def download_schp() -> DownloadTask:
     def action() -> None:
-        if gdown is None:
-            raise RuntimeError("gdown is not installed")
-        gdown.download(SCHP_DRIVE_URL, str(SCHP_PATH), quiet=False)
+        # Accept direct HTTP/HF URLs; fallback to gdown if Google Drive
+        if SCHP_DRIVE_URL.startswith("http") and "drive.google.com" not in SCHP_DRIVE_URL:
+            download_http(SCHP_DRIVE_URL, SCHP_PATH)
+        else:
+            if gdown is None:
+                raise RuntimeError("gdown is not installed for Google Drive URLs")
+            gdown.download(SCHP_DRIVE_URL, str(SCHP_PATH), quiet=False)
 
     return DownloadTask("SCHP weights", SCHP_PATH, action)
 

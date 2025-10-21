@@ -31,13 +31,19 @@ _DEFAULT_CORS_ORIGINS = [
 
 _cors_env = os.environ.get("TRYON_CORS_ORIGINS")
 if _cors_env:
-    CORS_ALLOW_ORIGINS = [origin.strip() for origin in _cors_env.split(",") if origin.strip()]
+    if _cors_env.strip() == "*":
+        CORS_ALLOW_ORIGINS = ["*"]
+        CORS_ALLOW_ORIGIN_REGEX = None  # type: ignore[assignment]
+    else:
+        CORS_ALLOW_ORIGINS = [origin.strip() for origin in _cors_env.split(",") if origin.strip()]
+        CORS_ALLOW_ORIGIN_REGEX = os.environ.get(
+            "TRYON_CORS_ORIGIN_REGEX", r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+        )
 else:
     CORS_ALLOW_ORIGINS = _DEFAULT_CORS_ORIGINS
-
-CORS_ALLOW_ORIGIN_REGEX = os.environ.get(
-    "TRYON_CORS_ORIGIN_REGEX", r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
-)
+    CORS_ALLOW_ORIGIN_REGEX = os.environ.get(
+        "TRYON_CORS_ORIGIN_REGEX", r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+    )
 
 # Directory where generated artifacts (e.g., try-on previews) are written.
 OUTPUTS_DIR = Path(
@@ -58,3 +64,13 @@ CACHE_DIR.mkdir(exist_ok=True, parents=True)
 # Simple log directory for session metadata (optional)
 LOG_DIR = Path(os.environ.get("TRYON_LOG_DIR", BASE_PATH.parent / "logs"))
 LOG_DIR.mkdir(exist_ok=True, parents=True)
+
+# Try-on frames count (default 5)
+NUM_TRYON_FRAMES = int(os.environ.get("NUM_TRYON_FRAMES", "5"))
+
+# Sizing extended config (not strictly required by rules engine yet)
+SIZING_MODE = os.environ.get("SIZING_MODE", "rules")
+SIZING_BRAND_TABLE_DIR = Path(os.environ.get("SIZING_BRAND_TABLE_DIR", MODELS_BASE_DIR / "sizing" / "brand_charts"))
+SIZING_PRIORS_CSV = Path(os.environ.get("SIZING_PRIORS_CSV", MODELS_BASE_DIR / "sizing" / "anthro_priors.csv"))
+SIZING_FIT_TOLERANCES = Path(os.environ.get("SIZING_FIT_TOLERANCES", MODELS_BASE_DIR / "sizing" / "fit_tolerances.yaml"))
+SIZING_KEYPOINT_NUDGE_MAX_CM = float(os.environ.get("SIZING_KEYPOINT_NUDGE_MAX_CM", "2.0"))

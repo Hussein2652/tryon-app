@@ -45,14 +45,23 @@ app = FastAPI(
     description="API surface for sizing recommendations and virtual try-on previews.",
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ALLOW_ORIGINS,
-    allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if CORS_ALLOW_ORIGIN_REGEX is None and CORS_ALLOW_ORIGINS == ["*"]:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=CORS_ALLOW_ORIGINS,
+        allow_origin_regex=CORS_ALLOW_ORIGIN_REGEX,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 app.mount("/outputs", StaticFiles(directory=OUTPUTS_DIR), name="outputs")
 

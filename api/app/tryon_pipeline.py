@@ -11,7 +11,7 @@ from typing import List, Optional
 from PIL import Image, ImageDraw, ImageFont
 
 from .cache import write_cache
-from .config import ENGINE_MODE, OUTPUTS_DIR
+from .config import ENGINE_MODE, OUTPUTS_DIR, NUM_TRYON_FRAMES
 from .metrics import observe_latency
 from .cv import PreprocessManager
 from .utils import stable_content_hash
@@ -20,7 +20,7 @@ from .utils import stable_content_hash
 logger = logging.getLogger(__name__)
 
 DEFAULT_POSE_SET = "SET_A"
-POSE_COUNT = 5
+POSE_COUNT = NUM_TRYON_FRAMES
 
 ENGINE_PLACEHOLDER = "placeholder"
 ENGINE_STABLEVITON = "stableviton"
