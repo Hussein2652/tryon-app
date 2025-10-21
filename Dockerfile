@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1.4
-FROM python:3.11-slim AS base
+# Allow overriding the base image to a GPU-ready image (e.g., PyTorch CUDA runtime)
+ARG BASE_IMAGE=python:3.11-slim
+FROM ${BASE_IMAGE} AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
