@@ -1,0 +1,15 @@
+{
+  "brand_id": "ACME",
+  "category": "bottoms",
+  "fit": "slim",
+  "stretch_pct": 0.10,
+  "inputs": {
+    "method": "direct",
+    "waist_circ_cm": 82
+  },
+  "size_chart": [
+    { "size": "28", "half_waist_cm": 37 },
+    { "size": "30", "half_waist_cm": 39 },
+    { "size": "32", "half_waist_cm": 41 }
+  ]
+}

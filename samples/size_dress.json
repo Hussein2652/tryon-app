@@ -1,0 +1,21 @@
+{
+  "brand_id": "ACME",
+  "category": "dress",
+  "fit": "regular",
+  "stretch_pct": 0.03,
+  "inputs": {
+    "method": "direct",
+    "bust_circ_cm": 92,
+    "exif": {
+      "focal_length_mm": 26,
+      "sensor_width_mm": 5.6,
+      "subject_width_px": 520,
+      "estimated_subject_width_cm": 46
+    }
+  },
+  "size_chart": [
+    { "size": "S", "half_bust_cm": 43.5 },
+    { "size": "M", "half_bust_cm": 46.0 },
+    { "size": "L", "half_bust_cm": 48.5 }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "brand_id": "ACME",
+  "category": "upper_top",
+  "fit": "regular",
+  "stretch_pct": 0.05,
+  "inputs": {
+    "method": "direct",
+    "chest_circ_cm": 96
+  },
+  "size_chart": [
+    { "size": "S", "half_chest_cm": 49 },
+    { "size": "M", "half_chest_cm": 52 },
+    { "size": "L", "half_chest_cm": 55 }
+  ]
+}
