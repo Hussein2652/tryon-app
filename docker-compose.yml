@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   api:
     build:
@@ -12,14 +10,30 @@ services:
     environment:
       - TRYON_OUTPUTS_DIR=/tmp/tryon/outputs
       - TRYON_UPLOADS_DIR=/tmp/tryon/uploads
+      - TRYON_MODELS_DIR=/models
       - STABLEVITON_SHAREPOINT_URL
       - SCHP_DRIVE_URL
       - INSTANTID_ANTELOPE_URL
+      - HUGGINGFACE_HUB_TOKEN
+      - NVIDIA_VISIBLE_DEVICES=all
     ports:
       - "8008:8008"
     volumes:
       - ./outputs:/tmp/tryon/outputs
       - ./uploads:/tmp/tryon/uploads
+      - ./models:/models
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;print(urllib.request.urlopen('http://localhost:8008/healthz').read().decode())"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    # For Compose v2 with NVIDIA toolkit, this can also be used:
+    # gpus: all
 
   web:
     image: node:20-alpine
