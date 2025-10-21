@@ -6,6 +6,11 @@ services:
       args:
         INSTALL_ML_DEPS: "true"
         DOWNLOAD_MODELS: "true"
+        STABLEVITON_SHAREPOINT_URL: ${STABLEVITON_SHAREPOINT_URL}
+        CONTROLNET_OPENPOSE_URL: ${CONTROLNET_OPENPOSE_URL}
+        SCHP_DRIVE_URL: ${SCHP_DRIVE_URL}
+        INSTANTID_ANTELOPE_URL: ${INSTANTID_ANTELOPE_URL}
+        HUGGINGFACE_HUB_TOKEN: ${HUGGINGFACE_HUB_TOKEN}
     image: tryon-api
     environment:
       - TRYON_OUTPUTS_DIR=/tmp/tryon/outputs
@@ -19,8 +24,8 @@ services:
     ports:
       - "8008:8008"
     volumes:
-      - ./outputs:/tmp/tryon/outputs
-      - ./uploads:/tmp/tryon/uploads
+      - ./outputs:/app/api/outputs
+      - ./uploads:/app/api/uploads
       - ./models:/models
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;print(urllib.request.urlopen('http://localhost:8008/healthz').read().decode())"]

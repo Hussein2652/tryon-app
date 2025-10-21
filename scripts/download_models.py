@@ -82,16 +82,15 @@ def download_controlnet_openpose() -> DownloadTask:
     dest = CONTROLNET_DIR / "control_v11p_sd15_openpose.safetensors"
 
     def action() -> None:
-        url = os.environ.get(
-            "CONTROLNET_OPENPOSE_URL",
-            "",
-        )
+        url = os.environ.get("CONTROLNET_OPENPOSE_URL", "")
         if url:
+            # Save as friendly name regardless of source filename
             download_http(url, dest)
         else:
+            # Default file name on this repo is diffusion_pytorch_model.safetensors
             download_with_hf(
                 "lllyasviel/control_v11p_sd15_openpose",
-                "control_v11p_sd15_openpose.safetensors",
+                "diffusion_pytorch_model.safetensors",
                 dest,
             )
 
