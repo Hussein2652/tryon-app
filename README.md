@@ -93,6 +93,8 @@ Environment knobs (defaults in `api/app/config.py`):
 - `CONTROLNET_OPENPOSE_DIR` – ControlNet OpenPose checkpoint path.
 - `INSTANTID_DIR` – InstantID assets for identity preservation.
 - `SCHP_WEIGHTS` – Semantic human parsing weights (LIP/CIHP).
+- `SD15_MODEL_DIR` – Diffusers-format Stable Diffusion 1.5 base model directory.
+- `SD15_MODEL_ID` – Hugging Face repo id to snapshot into `SD15_MODEL_DIR` (default `runwayml/stable-diffusion-v1-5`).
 - `TRYON_USE_FP16` – `"1"` to enable fp16 inference when available.
 - `TRYON_MAX_RES` – Max render resolution (e.g., 768 or 1024).
 - `TRYON_CACHE_DIR`, `TRYON_LOG_DIR` – content cache + structured logs.
@@ -114,6 +116,8 @@ services:
         DOWNLOAD_MODELS: "true"
     environment:
       - STABLEVITON_SHAREPOINT_URL=<your SharePoint link>
+      - SD15_MODEL_DIR=/models/sd15
+      - SD15_MODEL_ID=runwayml/stable-diffusion-v1-5
 ```
 
-Assets hosted behind authentication (e.g., StableVITON SharePoint, SMPL-X) still require a valid link or a mounted volume; the script logs a warning when it cannot download them.
+Assets hosted behind authentication (e.g., StableVITON SharePoint, SMPL-X) still require a valid link or a mounted volume; the script logs a warning when it cannot download them. SD1.5 is pulled from Hugging Face via `snapshot_download` when `DOWNLOAD_MODELS=true` (or on container start when `DOWNLOAD_MODELS_ON_START=1`) and saved under `SD15_MODEL_DIR`.

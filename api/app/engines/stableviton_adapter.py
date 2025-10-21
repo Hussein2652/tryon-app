@@ -110,11 +110,94 @@ class StableVITONEngine:
         return self._infer_compositor(inputs)
 
     def _infer_real(self, inputs: EngineInputs) -> List[bytes]:
-        # Stub: Replace with actual StableVITON call. Keep a clear error to
-        # differentiate from placeholder behavior.
-        raise StableVITONNotReady(
-            "Real StableVITON pipeline not integrated yet."
+        # Attempt a ControlNet OpenPose + SD1.5 img2img render using local assets.
+        try:
+            import torch  # type: ignore
+            from diffusers import (
+                ControlNetModel,
+                StableDiffusionControlNetImg2ImgPipeline,
+                UniPCMultistepScheduler,
+            )
+        except Exception as exc:  # pylint: disable=broad-except
+            raise StableVITONNotReady(f"Diffusers/Torch not available: {exc}") from exc
+
+        # Validate assets
+        from pathlib import Path
+
+        controlnet_path = Path(self.cfg.controlnet_dir) / "control_v11p_sd15_openpose.safetensors"
+        sd15_dir = config.SD15_MODEL_DIR
+        if not controlnet_path.exists():
+            raise StableVITONNotReady(f"Missing ControlNet OpenPose at {controlnet_path}")
+        if not (sd15_dir.exists() and (sd15_dir / "model_index.json").exists()):
+            raise StableVITONNotReady(
+                f"Missing SD1.5 model in diffusers format at {sd15_dir}."
+            )
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        dtype = torch.float16 if (self.cfg.use_fp16 and device == "cuda") else torch.float32
+
+        controlnet = ControlNetModel.from_single_file(str(controlnet_path), torch_dtype=dtype)
+        pipe = StableDiffusionControlNetImg2ImgPipeline.from_pretrained(
+            str(sd15_dir),
+            controlnet=controlnet,
+            torch_dtype=dtype,
+            safety_checker=None,
+            feature_extractor=None,
         )
+        pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
+        pipe = pipe.to(device)
+        try:
+            pipe.disable_progress_bar()
+        except Exception:
+            pass
+        try:
+            pipe.enable_xformers_memory_efficient_attention()
+        except Exception:
+            pass
+
+        user_img = Image.open(io.BytesIO(inputs.user_png)).convert("RGB")
+        if inputs.pose_map:
+            control_image = Image.open(io.BytesIO(inputs.pose_map)).convert("RGB")
+        elif inputs.artifacts and getattr(inputs.artifacts.pose, "pose_map", None) is not None:
+            control_image = inputs.artifacts.pose.pose_map.convert("RGB")
+        else:
+            control_image = Image.new("RGB", user_img.size, (0, 0, 0))
+        control_image = control_image.resize(user_img.size)
+
+        prompt_bits = [
+            "photo of a person wearing a shirt",
+            "realistic fabric, natural drape, clean background",
+        ]
+        if inputs.size:
+            prompt_bits.append(f"size {inputs.size}")
+        prompt = ", ".join(prompt_bits)
+        negative = "blurry, lowres, deformed, extra limbs, bad hands, text"
+
+        frames: List[bytes] = []
+        count = max(1, FALLBACK_FRAME_COUNT)
+        base_seed = 24681357
+        for i in range(count):
+            g = torch.Generator(device=device).manual_seed(base_seed + i)
+            try:
+                result = pipe(
+                    prompt=prompt,
+                    negative_prompt=negative,
+                    image=user_img,
+                    control_image=control_image,
+                    num_inference_steps=25,
+                    guidance_scale=7.5,
+                    strength=0.35,
+                    generator=g,
+                )
+            except Exception as exc:  # pylint: disable=broad-except
+                raise StableVITONNotReady(f"Diffusion inference failed: {exc}") from exc
+            image = result.images[0]
+            image = self._clamp_resolution(image)
+            buf = io.BytesIO()
+            image.save(buf, format="PNG")
+            frames.append(buf.getvalue())
+
+        return frames
 
     def _infer_compositor(self, inputs: EngineInputs) -> List[bytes]:
         """Produce non-placeholder previews by compositing garment onto user.
@@ -245,4 +328,3 @@ def run_stableviton(
         artifacts=artifacts,
     )
     return engine.run(inputs)
-

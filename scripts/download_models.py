@@ -22,9 +22,10 @@ import urllib.request
 
 
 try:
-    from huggingface_hub import hf_hub_download
+    from huggingface_hub import hf_hub_download, snapshot_download
 except ImportError:  # pragma: no cover - optional dependency
     hf_hub_download = None  # type: ignore
+    snapshot_download = None  # type: ignore
 
 try:
     import gdown  # type: ignore
@@ -38,6 +39,8 @@ STABLEVITON_DIR = Path(os.environ.get("STABLEVITON_CKPT_DIR", BASE_MODELS_DIR / 
 CONTROLNET_DIR = Path(os.environ.get("CONTROLNET_OPENPOSE_DIR", BASE_MODELS_DIR / "controlnet" / "openpose"))
 SCHP_PATH = Path(os.environ.get("SCHP_WEIGHTS", BASE_MODELS_DIR / "schp" / "schp.pth"))
 INSTANTID_DIR = Path(os.environ.get("INSTANTID_DIR", BASE_MODELS_DIR / "instantid"))
+SD15_MODEL_DIR = Path(os.environ.get("SD15_MODEL_DIR", BASE_MODELS_DIR / "sd15"))
+SD15_MODEL_ID = os.environ.get("SD15_MODEL_ID", "runwayml/stable-diffusion-v1-5")
 
 STABLEVITON_SHAREPOINT_URL = os.environ.get("STABLEVITON_SHAREPOINT_URL")
 SCHP_DRIVE_URL = os.environ.get(
@@ -72,6 +75,13 @@ def download_with_hf(repo_id: str, filename: str, destination: Path) -> None:
     shutil.copy2(cached, destination)
 
 
+def download_repo_snapshot(repo_id: str, destination: Path) -> None:
+    if snapshot_download is None:
+        raise RuntimeError("huggingface_hub is not installed")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    snapshot_download(repo_id=repo_id, local_dir=destination, local_dir_use_symlinks=False)
+
+
 def download_http(url: str, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     with urllib.request.urlopen(url) as resp, open(destination, "wb") as f:
@@ -95,6 +105,15 @@ def download_controlnet_openpose() -> DownloadTask:
             )
 
     return DownloadTask("ControlNet OpenPose", dest, action)
+
+
+def download_sd15_repo() -> DownloadTask:
+    dest = SD15_MODEL_DIR / "model_index.json"
+
+    def action() -> None:
+        download_repo_snapshot(SD15_MODEL_ID, SD15_MODEL_DIR)
+
+    return DownloadTask("Stable Diffusion 1.5 (diffusers)", dest, action)
 
 
 def download_instantid_files() -> list[DownloadTask]:
@@ -185,6 +204,7 @@ def main() -> None:
         tasks.append(stableviton_task)
 
     tasks.append(download_controlnet_openpose())
+    tasks.append(download_sd15_repo())
     tasks.extend(download_instantid_files())
     tasks.append(download_antelopev2())
     tasks.append(download_schp())

@@ -18,6 +18,9 @@ CONTROLNET_OPENPOSE_DIR = Path(
 )
 INSTANTID_DIR = Path(os.environ.get("INSTANTID_DIR", MODELS_BASE_DIR / "instantid"))
 SCHP_WEIGHTS = Path(os.environ.get("SCHP_WEIGHTS", MODELS_BASE_DIR / "schp" / "schp.pth"))
+# Base Stable Diffusion 1.5 model directory (diffusers format)
+SD15_MODEL_DIR = Path(os.environ.get("SD15_MODEL_DIR", MODELS_BASE_DIR / "sd15"))
+SD15_MODEL_ID = os.environ.get("SD15_MODEL_ID", "runwayml/stable-diffusion-v1-5")
 USE_FP16 = os.environ.get("TRYON_USE_FP16", "1") == "1"
 MAX_RENDER_RES = int(os.environ.get("TRYON_MAX_RES", "768"))
 
