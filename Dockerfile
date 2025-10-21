@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.4
 FROM python:3.11-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -28,13 +29,16 @@ ENV CONTROLNET_OPENPOSE_URL=${CONTROLNET_OPENPOSE_URL}
 ENV SCHP_DRIVE_URL=${SCHP_DRIVE_URL}
 ENV INSTANTID_ANTELOPE_URL=${INSTANTID_ANTELOPE_URL}
 ENV HUGGINGFACE_HUB_TOKEN=${HUGGINGFACE_HUB_TOKEN}
-RUN pip install --no-cache-dir -r /app/api/requirements.txt && \
+# Use BuildKit cache for pip to avoid re-downloading ML deps across rebuilds
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r /app/api/requirements.txt && \
     if [ "$INSTALL_ML_DEPS" = "true" ]; then \
-        pip install --no-cache-dir -r /app/api/requirements-ml.txt ; \
+        pip install -r /app/api/requirements-ml.txt ; \
     fi
 
 COPY api /app/api
 COPY scripts /app/scripts
+RUN chmod +x /app/scripts/entrypoint.sh
 
 RUN if [ "$DOWNLOAD_MODELS" = "true" ]; then \
         python /app/scripts/download_models.py || echo "Model download script ended with non-zero status" ; \
@@ -44,4 +48,5 @@ EXPOSE 8008
 
 WORKDIR /app/api
 
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8008"]

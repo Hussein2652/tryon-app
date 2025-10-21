@@ -8,7 +8,7 @@ Local FastAPI implementation that exposes the `/size/recommend` and `/tryon/prev
 - `api/app/sizing.py` – Deterministic sizing rule engine + Pydantic schemas.
 - `api/app/tryon_pipeline.py` – Engine-aware try-on pipeline (placeholder or StableVITON adapter).
 - `api/app/config.py` – Local directories for generated artifacts.
-- `api/app/engines/stableviton_adapter.py` – Lazy-loaded StableVITON adapter stub (swap in the real engine when available).
+- `api/app/engines/stableviton_adapter.py` – StableVITON adapter with a deterministic compositor baseline (non‑placeholder). Swap in the real engine when available.
 
 ## Getting started
 
@@ -66,7 +66,7 @@ curl -X POST http://localhost:8008/tryon/preview \\
 
 Generated frames are written under `api/outputs/` and served at `/outputs/...`.
 
-Set `TRYON_ENGINE=stableviton` to route `/tryon/preview` through the StableVITON adapter once the real engine dependencies are installed. Otherwise, the placeholder renderer remains active.
+Set `TRYON_ENGINE=stableviton` to route `/tryon/preview` through the StableVITON adapter. If the full ML stack is not present, the adapter produces non‑placeholder composites (garment over user photo). When the official StableVITON pipeline is installed, you can wire it into the adapter’s `_infer_real` path.
 
 ### Tests
 

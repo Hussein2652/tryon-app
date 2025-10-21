@@ -4,8 +4,8 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        INSTALL_ML_DEPS: "true"
-        DOWNLOAD_MODELS: "true"
+        INSTALL_ML_DEPS: "${INSTALL_ML_DEPS:-true}"
+        DOWNLOAD_MODELS: "${DOWNLOAD_MODELS:-false}"
         STABLEVITON_SHAREPOINT_URL: ${STABLEVITON_SHAREPOINT_URL}
         CONTROLNET_OPENPOSE_URL: ${CONTROLNET_OPENPOSE_URL}
         SCHP_DRIVE_URL: ${SCHP_DRIVE_URL}
@@ -13,9 +13,11 @@ services:
         HUGGINGFACE_HUB_TOKEN: ${HUGGINGFACE_HUB_TOKEN}
     image: tryon-api
     environment:
+      - TRYON_ENGINE=${TRYON_ENGINE:-stableviton}
       - TRYON_OUTPUTS_DIR=/tmp/tryon/outputs
       - TRYON_UPLOADS_DIR=/tmp/tryon/uploads
       - TRYON_MODELS_DIR=/models
+      - DOWNLOAD_MODELS_ON_START=${DOWNLOAD_MODELS_ON_START:-1}
       - STABLEVITON_SHAREPOINT_URL
       - SCHP_DRIVE_URL
       - INSTANTID_ANTELOPE_URL

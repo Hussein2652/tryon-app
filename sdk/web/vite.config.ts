@@ -21,6 +21,10 @@ export default defineConfig({
       "/metrics": {
         target: "http://api:8008",
         changeOrigin: true
+      },
+      "/outputs": {
+        target: "http://api:8008",
+        changeOrigin: true
       }
     }
   }
