@@ -14,8 +14,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY api/requirements.txt /app/api/requirements.txt
 COPY api/requirements-ml.txt /app/api/requirements-ml.txt
 
-ARG INSTALL_ML_DEPS=false
-ARG DOWNLOAD_MODELS=false
+ARG INSTALL_ML_DEPS=true
+ARG DOWNLOAD_MODELS=true
 ENV INSTALL_ML_DEPS=${INSTALL_ML_DEPS}
 ENV DOWNLOAD_MODELS=${DOWNLOAD_MODELS}
 RUN pip install --no-cache-dir -r /app/api/requirements.txt && \
