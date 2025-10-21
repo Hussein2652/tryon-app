@@ -7,19 +7,19 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/size": {
-        target: "http://localhost:8008",
+        target: "http://api:8008",
         changeOrigin: true
       },
       "/tryon": {
-        target: "http://localhost:8008",
+        target: "http://api:8008",
         changeOrigin: true
       },
       "/healthz": {
-        target: "http://localhost:8008",
+        target: "http://api:8008",
         changeOrigin: true
       },
       "/metrics": {
-        target: "http://localhost:8008",
+        target: "http://api:8008",
         changeOrigin: true
       }
     }
