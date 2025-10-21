@@ -15,8 +15,8 @@ services:
     image: tryon-api
     environment:
       - TRYON_ENGINE=${TRYON_ENGINE:-stableviton}
-      - TRYON_OUTPUTS_DIR=/tmp/tryon/outputs
-      - TRYON_UPLOADS_DIR=/tmp/tryon/uploads
+      - TRYON_OUTPUTS_DIR=/app/api/outputs
+      - TRYON_UPLOADS_DIR=/app/api/uploads
       - TRYON_MODELS_DIR=/models
       - DOWNLOAD_MODELS_ON_START=${DOWNLOAD_MODELS_ON_START:-1}
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
