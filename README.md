@@ -96,3 +96,24 @@ Environment knobs (defaults in `api/app/config.py`):
 - `TRYON_USE_FP16` – `"1"` to enable fp16 inference when available.
 - `TRYON_MAX_RES` – Max render resolution (e.g., 768 or 1024).
 - `TRYON_CACHE_DIR`, `TRYON_LOG_DIR` – content cache + structured logs.
+- `STABLEVITON_SHAREPOINT_URL` – optional direct download link for the official StableVITON checkpoint (SharePoint).
+- `SCHP_DRIVE_URL` – Google Drive URL for SCHP weights (defaults to the LIP checkpoint).
+- `INSTANTID_ANTELOPE_URL` – optional override for the InsightFace `antelopev2` bundle.
+
+### Auto-downloading model assets
+
+Set the Docker build arguments `INSTALL_ML_DEPS=true` and `DOWNLOAD_MODELS=true` to pull the ML stack and attempt model downloads during the image build. Example Compose snippet:
+
+```yaml
+services:
+  api:
+    build:
+      context: .
+      args:
+        INSTALL_ML_DEPS: "true"
+        DOWNLOAD_MODELS: "true"
+    environment:
+      - STABLEVITON_SHAREPOINT_URL=<your SharePoint link>
+```
+
+Assets hosted behind authentication (e.g., StableVITON SharePoint, SMPL-X) still require a valid link or a mounted volume; the script logs a warning when it cannot download them.

@@ -5,10 +5,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        INSTALL_ML_DEPS: "true"
+        DOWNLOAD_MODELS: "true"
     image: tryon-api
     environment:
       - TRYON_OUTPUTS_DIR=/tmp/tryon/outputs
       - TRYON_UPLOADS_DIR=/tmp/tryon/uploads
+      - STABLEVITON_SHAREPOINT_URL
+      - SCHP_DRIVE_URL
+      - INSTANTID_ANTELOPE_URL
     ports:
       - "8008:8008"
     volumes:

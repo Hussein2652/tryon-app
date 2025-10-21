@@ -15,12 +15,20 @@ COPY api/requirements.txt /app/api/requirements.txt
 COPY api/requirements-ml.txt /app/api/requirements-ml.txt
 
 ARG INSTALL_ML_DEPS=false
+ARG DOWNLOAD_MODELS=false
+ENV INSTALL_ML_DEPS=${INSTALL_ML_DEPS}
+ENV DOWNLOAD_MODELS=${DOWNLOAD_MODELS}
 RUN pip install --no-cache-dir -r /app/api/requirements.txt && \
     if [ "$INSTALL_ML_DEPS" = "true" ]; then \
         pip install --no-cache-dir -r /app/api/requirements-ml.txt ; \
     fi
 
 COPY api /app/api
+COPY scripts /app/scripts
+
+RUN if [ "$DOWNLOAD_MODELS" = "true" ]; then \
+        python /app/scripts/download_models.py || echo "Model download script ended with non-zero status" ; \
+    fi
 
 EXPOSE 8008
 

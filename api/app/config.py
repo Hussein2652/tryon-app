@@ -8,14 +8,16 @@ MODEL_VERSION = os.environ.get("TRYON_MODEL_VERSION", "v0")
 
 ENGINE_MODE = os.environ.get("TRYON_ENGINE", "placeholder").lower()
 
+MODELS_BASE_DIR = Path(os.environ.get("TRYON_MODELS_DIR", "/models"))
+
 STABLEVITON_CKPT_DIR = Path(
-    os.environ.get("STABLEVITON_CKPT_DIR", "/models/stableviton")
+    os.environ.get("STABLEVITON_CKPT_DIR", MODELS_BASE_DIR / "stableviton")
 )
 CONTROLNET_OPENPOSE_DIR = Path(
-    os.environ.get("CONTROLNET_OPENPOSE_DIR", "/models/controlnet/openpose")
+    os.environ.get("CONTROLNET_OPENPOSE_DIR", MODELS_BASE_DIR / "controlnet" / "openpose")
 )
-INSTANTID_DIR = Path(os.environ.get("INSTANTID_DIR", "/models/instantid"))
-SCHP_WEIGHTS = Path(os.environ.get("SCHP_WEIGHTS", "/models/schp/lip.pth"))
+INSTANTID_DIR = Path(os.environ.get("INSTANTID_DIR", MODELS_BASE_DIR / "instantid"))
+SCHP_WEIGHTS = Path(os.environ.get("SCHP_WEIGHTS", MODELS_BASE_DIR / "schp" / "schp.pth"))
 USE_FP16 = os.environ.get("TRYON_USE_FP16", "1") == "1"
 MAX_RENDER_RES = int(os.environ.get("TRYON_MAX_RES", "768"))
 
