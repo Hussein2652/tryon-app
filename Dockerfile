@@ -12,7 +12,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY api/requirements.txt /app/api/requirements.txt
-RUN pip install --no-cache-dir -r /app/api/requirements.txt
+COPY api/requirements-ml.txt /app/api/requirements-ml.txt
+
+ARG INSTALL_ML_DEPS=false
+RUN pip install --no-cache-dir -r /app/api/requirements.txt && \
+    if [ "$INSTALL_ML_DEPS" = "true" ]; then \
+        pip install --no-cache-dir -r /app/api/requirements-ml.txt ; \
+    fi
 
 COPY api /app/api
 

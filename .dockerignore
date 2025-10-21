@@ -4,4 +4,8 @@ __pycache__/
 *.pyc
 outputs/
 uploads/
+cache/
+logs/
+sdk/web/node_modules/
+sdk/web/dist/
 *.log

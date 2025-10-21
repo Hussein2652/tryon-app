@@ -17,6 +17,8 @@ cd api
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+# Optional ML stack (StableVITON, SCHP, etc.)
+# pip install -r requirements-ml.txt
 uvicorn app.main:app --reload --port 8008
 ```
 
@@ -24,6 +26,8 @@ uvicorn app.main:app --reload --port 8008
 
 ```bash
 docker build -t tryon-api .
+# Install ML dependencies during build (optional):
+# docker build -t tryon-api --build-arg INSTALL_ML_DEPS=true .
 docker run --rm -p 8008:8008 \
   -e TRYON_OUTPUTS_DIR=/tmp/tryon/outputs \
   -e TRYON_UPLOADS_DIR=/tmp/tryon/uploads \
@@ -33,6 +37,14 @@ docker run --rm -p 8008:8008 \
 ```
 
 The container exposes the API under `http://localhost:8008`. Mounting host directories is optional but keeps generated frames accessible on the host.
+
+### Full stack (API + web harness)
+
+```bash
+docker compose up --build
+```
+
+The API will listen on `localhost:8008` and the React harness on `localhost:5173` (proxying API calls).
 
 ### Sample requests
 
@@ -55,3 +67,32 @@ curl -X POST http://localhost:8008/tryon/preview \\
 Generated frames are written under `api/outputs/` and served at `/outputs/...`.
 
 Set `TRYON_ENGINE=stableviton` to route `/tryon/preview` through the StableVITON adapter once the real engine dependencies are installed. Otherwise, the placeholder renderer remains active.
+
+### Tests
+
+```bash
+cd api
+pytest
+```
+
+### Frontend harness (local)
+
+```bash
+cd sdk/web
+npm install
+npm run dev
+```
+
+The harness proxies API calls to `http://localhost:8008` by default.
+
+### Engine configuration
+
+Environment knobs (defaults in `api/app/config.py`):
+
+- `STABLEVITON_CKPT_DIR` – base directory containing StableVITON weights/checkpoints.
+- `CONTROLNET_OPENPOSE_DIR` – ControlNet OpenPose checkpoint path.
+- `INSTANTID_DIR` – InstantID assets for identity preservation.
+- `SCHP_WEIGHTS` – Semantic human parsing weights (LIP/CIHP).
+- `TRYON_USE_FP16` – `"1"` to enable fp16 inference when available.
+- `TRYON_MAX_RES` – Max render resolution (e.g., 768 or 1024).
+- `TRYON_CACHE_DIR`, `TRYON_LOG_DIR` – content cache + structured logs.

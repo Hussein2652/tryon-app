@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import io
 import logging
 import random
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
 from PIL import Image, ImageDraw, ImageFont
 
+from .cache import write_cache
 from .config import ENGINE_MODE, OUTPUTS_DIR
+from .metrics import observe_latency
+from .cv import PreprocessManager
 from .utils import stable_content_hash
 
 
@@ -43,6 +48,7 @@ class TryOnPipeline:
         if self.engine_mode not in {ENGINE_PLACEHOLDER, ENGINE_STABLEVITON}:
             logger.warning("Unsupported TRYON_ENGINE %s; falling back to placeholder.", self.engine_mode)
             self.engine_mode = ENGINE_PLACEHOLDER
+        self.preprocessor = PreprocessManager()
 
     def run(
         self,
@@ -64,6 +70,15 @@ class TryOnPipeline:
             pose_set=pose_set_key,
         )
 
+        artifacts = None
+        pose_map_bytes = None
+        if self.engine_mode == ENGINE_STABLEVITON:
+            artifacts = self.preprocessor.run(user_photo)
+            if artifacts.pose.pose_map is not None:
+                pose_map_bytes = self._encode_image(artifacts.pose.pose_map)
+
+        start_time = time.perf_counter()
+
         if self.engine_mode == ENGINE_STABLEVITON:
             image_paths = self._ensure_stableviton_outputs(
                 cache_key=cache_key,
@@ -73,6 +88,8 @@ class TryOnPipeline:
                 pose_set=pose_set_key,
                 sku=sku,
                 size=size,
+                pose_map=pose_map_bytes,
+                artifacts=artifacts,
             )
         else:
             image_paths = self._ensure_placeholder_outputs(
@@ -84,6 +101,26 @@ class TryOnPipeline:
 
         frame_scores = self._generate_frame_scores(len(image_paths))
         confidence_avg = sum(frame_scores) / len(frame_scores) if frame_scores else 0.0
+
+        observe_latency(
+            "tryon_pipeline_seconds",
+            f"engine={self.engine_mode}",
+            time.perf_counter() - start_time,
+        )
+
+        write_cache(
+            cache_key,
+            namespace="tryon",
+            payload={
+                "engine": self.engine_mode,
+                "model_version": self.model_version,
+                "sku": sku,
+                "size": size,
+                "pose_set": pose_set_key,
+                "image_paths": [str(path) for path in image_paths],
+                "frame_scores": frame_scores,
+            },
+        )
 
         return TryOnResult(
             cache_key=cache_key,
@@ -150,6 +187,8 @@ class TryOnPipeline:
         pose_set: str,
         sku: Optional[str],
         size: Optional[str],
+        pose_map: Optional[bytes],
+        artifacts: Optional[object],
     ) -> List[Path]:
         try:
             from .engines.stableviton_adapter import run_stableviton
@@ -159,15 +198,25 @@ class TryOnPipeline:
             ) from exc
 
         masks = {"garment": garment_mask} if garment_mask else None
+        if artifacts is not None:
+            if artifacts.segmentation.alpha_mask is not None:
+                encoded = self._encode_image(artifacts.segmentation.alpha_mask)
+                masks = masks or {}
+                masks["user_alpha"] = encoded
+            if getattr(artifacts.segmentation, "face_mask", None) is not None:
+                encoded = self._encode_image(artifacts.segmentation.face_mask)
+                masks = masks or {}
+                masks["face"] = encoded
 
         frames = run_stableviton(
             user_png=user_photo,
             garment_png=garment_front,
-            pose_map=None,
+            pose_map=pose_map,
             masks=masks,
             pose_set=pose_set,
             sku=sku,
             size=size,
+            artifacts=artifacts,
         )
         if not frames:
             raise RuntimeError("StableVITON adapter returned no frames.")
@@ -237,3 +286,9 @@ class TryOnPipeline:
         rng = random.Random(1234)
         base = 0.82
         return [round(base + rng.random() * 0.06, 2) for _ in range(count)]
+
+    @staticmethod
+    def _encode_image(image: Image.Image) -> bytes:
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        return buffer.getvalue()

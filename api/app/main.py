@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
+import time
+from pathlib import Path
 from typing import Optional
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, status
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -14,12 +17,18 @@ from .config import (
     MODEL_VERSION,
     OUTPUTS_DIR,
 )
+from .cache import delete_cache, read_cache
+from .metrics import increment, observe_latency, snapshot
+from .moderation import evaluate_user_photo
 from .sizing import (
     SizeRecommendRequest,
     SizingEngine,
     build_response,
 )
 from .tryon_pipeline import TryOnPipeline
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_sizing_engine() -> SizingEngine:
@@ -48,9 +57,27 @@ app.add_middleware(
 app.mount("/outputs", StaticFiles(directory=OUTPUTS_DIR), name="outputs")
 
 
+@app.middleware("http")
+async def log_and_measure_requests(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration = time.perf_counter() - start
+    label = f"{request.method} {request.url.path}"
+    increment("requests_total", label)
+    observe_latency("http_request_seconds", label, duration)
+    response.headers["X-Process-Time"] = f"{duration:.3f}s"
+    logger.info("%s %s -> %s (%.3fs)", request.method, request.url.path, response.status_code, duration)
+    return response
+
+
 @app.get("/healthz")
 async def healthz():
     return {"ok": True}
+
+
+@app.get("/metrics")
+async def metrics():
+    return JSONResponse(status_code=status.HTTP_200_OK, content=snapshot())
 
 
 @app.post("/size/recommend")
@@ -91,6 +118,13 @@ async def tryon_preview(
             detail="garment_front is empty.",
         )
 
+    qa_issues = evaluate_user_photo(user_photo_bytes)
+    if qa_issues:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=[issue.__dict__ for issue in qa_issues],
+        )
+
     result = pipeline.run(
         user_photo=user_photo_bytes,
         garment_front=garment_front_bytes,
@@ -114,3 +148,35 @@ async def tryon_preview(
         "confidence_avg": round(result.confidence_avg, 2),
     }
     return JSONResponse(status_code=status.HTTP_200_OK, content=payload)
+
+
+def _safe_output_path(path_str: str) -> Optional[Path]:
+    path = Path(path_str)
+    try:
+        path.resolve().relative_to(OUTPUTS_DIR.resolve())
+    except ValueError:
+        logger.warning("Attempted to remove file outside outputs directory: %s", path)
+        return None
+    return path
+
+
+@app.delete("/tryon/{cache_key}")
+async def delete_tryon_session(cache_key: str):
+    metadata = read_cache(cache_key, "tryon")
+    deleted_meta = delete_cache(cache_key, "tryon")
+    removed_files = []
+    if metadata:
+        for path_str in metadata.get("image_paths", []):
+            candidate = _safe_output_path(path_str)
+            if candidate and candidate.exists():
+                candidate.unlink()
+                removed_files.append(candidate.name)
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={
+            "ok": True,
+            "cache_key": cache_key,
+            "metadata_removed": deleted_meta,
+            "files_removed": removed_files,
+        },
+    )

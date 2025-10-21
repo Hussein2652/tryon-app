@@ -1,3 +1,6 @@
 api/outputs/
 api/uploads/
 api/cache/
+api/logs/
+sdk/web/node_modules/
+sdk/web/dist/
