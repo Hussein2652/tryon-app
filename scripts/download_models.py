@@ -155,15 +155,28 @@ def download_antelopev2() -> DownloadTask:
     extract_dir = INSTANTID_DIR / "antelopev2"
 
     def action() -> None:
-        if gdown is None:
-            raise RuntimeError("gdown is not installed")
         url = os.environ.get(
             "INSTANTID_ANTELOPE_URL",
             "https://sourceforge.net/projects/insightface.mirror/files/v0.7/antelopev2.zip/download",
         )
-        gdown.download(url, str(zip_dest), quiet=False)
-        shutil.unpack_archive(zip_dest, extract_dir)
-        zip_dest.unlink(missing_ok=True)
+        # Use gdown only for Google Drive links; otherwise, fetch via HTTP
+        if "drive.google.com" in url:
+            if gdown is None:
+                raise RuntimeError("gdown is not installed for Google Drive URLs")
+            gdown.download(url, str(zip_dest), quiet=False)
+        else:
+            download_http(url, zip_dest)
+        # Validate archive and extract
+        try:
+            shutil.unpack_archive(zip_dest, extract_dir)
+        except Exception as exc:  # pylint: disable=broad-except
+            # Corrupt or HTML file; cleanup so the task reruns next time
+            try:
+                zip_dest.unlink(missing_ok=True)
+            finally:
+                raise RuntimeError(f"antelopev2 archive invalid: {exc}")
+        else:
+            zip_dest.unlink(missing_ok=True)
 
     return DownloadTask("InstantID antelopev2", extract_dir / "glintr100.onnx", action)
 
