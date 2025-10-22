@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 import urllib.request
+import zipfile
 
 
 try:
@@ -100,26 +101,41 @@ def download_controlnet_openpose() -> DownloadTask:
 
     def action() -> None:
         url = os.environ.get("CONTROLNET_OPENPOSE_URL", "")
-        if url:
-            # If a direct file URL is provided, place the safetensors and try to fetch config.json too
+        if url and url.endswith(".safetensors"):
+            # If only a weights URL is provided, still snapshot the repo to bring configs
             weights = CONTROLNET_DIR / "control_v11p_sd15_openpose.safetensors"
             download_http(url, weights)
-            # Best-effort: also try to grab config.json from HF
             try:
-                download_with_hf("lllyasviel/control_v11p_sd15_openpose", "config.json", dest)
+                download_repo_snapshot("lllyasviel/control_v11p_sd15_openpose", CONTROLNET_DIR)
             except Exception:
-                pass
+                # fallback: try direct config.json
+                download_with_hf("lllyasviel/control_v11p_sd15_openpose", "config.json", dest)
         else:
             download_repo_snapshot("lllyasviel/control_v11p_sd15_openpose", CONTROLNET_DIR)
 
     return DownloadTask("ControlNet OpenPose", dest, action)
 
 
+def _sd15_requirements_met(root: Path) -> bool:
+    # Minimal set of files the pipeline expects
+    required = [
+        root / "model_index.json",
+        root / "unet" / "diffusion_pytorch_model.safetensors",
+        root / "vae" / "diffusion_pytorch_model.safetensors",
+    ]
+    return all(p.exists() for p in required)
+
+
 def download_sd15_repo() -> DownloadTask:
-    dest = SD15_MODEL_DIR / "model_index.json"
+    # Use a completion sentinel so we don't skip partial directories
+    dest = SD15_MODEL_DIR / ".complete"
 
     def action() -> None:
+        # Always call snapshot_download with resume; it will fetch only missing parts
         download_repo_snapshot(SD15_MODEL_ID, SD15_MODEL_DIR)
+        if not _sd15_requirements_met(SD15_MODEL_DIR):
+            raise RuntimeError("SD1.5 snapshot incomplete; required files missing")
+        dest.touch()
 
     return DownloadTask("Stable Diffusion 1.5 (diffusers)", dest, action)
 
@@ -151,34 +167,45 @@ def download_instantid_files() -> list[DownloadTask]:
 
 
 def download_antelopev2() -> DownloadTask:
-    zip_dest = INSTANTID_DIR / "antelopev2.zip"
     extract_dir = INSTANTID_DIR / "antelopev2"
+    sentinel = extract_dir / "glintr100.onnx"
 
     def action() -> None:
-        url = os.environ.get(
+        # Try multiple sources until one succeeds
+        url_env = os.environ.get(
             "INSTANTID_ANTELOPE_URL",
-            "https://sourceforge.net/projects/insightface.mirror/files/v0.7/antelopev2.zip/download",
+            "https://downloads.sourceforge.net/project/insightface/v0.7/antelopev2.zip",
         )
-        # Use gdown only for Google Drive links; otherwise, fetch via HTTP
-        if "drive.google.com" in url:
-            if gdown is None:
-                raise RuntimeError("gdown is not installed for Google Drive URLs")
-            gdown.download(url, str(zip_dest), quiet=False)
-        else:
-            download_http(url, zip_dest)
-        # Validate archive and extract
-        try:
-            shutil.unpack_archive(zip_dest, extract_dir)
-        except Exception as exc:  # pylint: disable=broad-except
-            # Corrupt or HTML file; cleanup so the task reruns next time
+        candidates = [
+            url_env,
+            # GitHub release mirror
+            "https://github.com/deepinsight/insightface/releases/download/v0.7/antelopev2.zip",
+            # SourceForge legacy redirect
+            "https://sourceforge.net/projects/insightface.mirror/files/v0.7/antelopev2.zip/download",
+        ]
+        zip_dest = INSTANTID_DIR / "antelopev2.zip"
+        last_exc: Optional[Exception] = None
+        for url in candidates:
             try:
+                if "drive.google.com" in url:
+                    if gdown is None:
+                        raise RuntimeError("gdown is not installed for Google Drive URLs")
+                    gdown.download(url, str(zip_dest), quiet=False)
+                else:
+                    download_http(url, zip_dest)
+                if not zipfile.is_zipfile(zip_dest):
+                    raise RuntimeError("downloaded file is not a valid zip")
+                shutil.unpack_archive(zip_dest, extract_dir)
                 zip_dest.unlink(missing_ok=True)
-            finally:
-                raise RuntimeError(f"antelopev2 archive invalid: {exc}")
+                break
+            except Exception as exc:  # pylint: disable=broad-except
+                last_exc = exc
+                zip_dest.unlink(missing_ok=True)
+                continue
         else:
-            zip_dest.unlink(missing_ok=True)
+            raise RuntimeError(f"antelopev2 download failed: {last_exc}")
 
-    return DownloadTask("InstantID antelopev2", extract_dir / "glintr100.onnx", action)
+    return DownloadTask("InstantID antelopev2", sentinel, action)
 
 
 def download_schp() -> DownloadTask:
