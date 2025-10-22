@@ -157,6 +157,11 @@ class StableVITONEngine:
             str(sd15_dir),
             **pipe_kwargs,  # type: ignore[arg-type]
         )
+        if not safety_flag:
+            try:
+                pipe.safety_checker = None  # type: ignore[attr-defined]
+            except Exception:
+                pass
         pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
         pipe = pipe.to(device)
         try:
@@ -242,6 +247,7 @@ class StableVITONEngine:
 
         # Derive mask: prefer explicit garment mask; otherwise alpha channel.
         mask_img: Optional[Image.Image] = None
+        user_alpha: Optional[Image.Image] = None
         if inputs.masks and "garment" in inputs.masks and inputs.masks["garment"]:
             mask_img = Image.open(io.BytesIO(inputs.masks["garment"])).convert("L")
         elif garment_img.mode == "RGBA":
@@ -250,10 +256,15 @@ class StableVITONEngine:
             # Luminance-based heuristic mask
             mask_img = garment_img.convert("L")
         mask_img = mask_img.filter(ImageFilter.GaussianBlur(radius=1)) if mask_img else None
+        if inputs.masks and inputs.masks.get("user_alpha"):
+            try:
+                user_alpha = Image.open(io.BytesIO(inputs.masks["user_alpha"])).convert("L")
+            except Exception:
+                user_alpha = None
 
-        # Determine target size/position: center-top ~65% of user width
+        # Determine target size/position: center-top ~50% of user width
         u_w, u_h = user_img.size
-        target_w = int(min(self.cfg.max_res, u_w) * 0.65)
+        target_w = int(min(self.cfg.max_res, u_w) * 0.5)
         scale = target_w / max(1, garment_img.width)
         target_h = int(garment_img.height * scale)
         garment_resized = garment_img.resize((target_w, target_h), Image.LANCZOS)
@@ -287,6 +298,10 @@ class StableVITONEngine:
                 composite.paste(rotated, paste_xy, rotated_mask)
             else:
                 composite.paste(rotated, paste_xy)
+
+            # Put person on top where available (occlusion)
+            if user_alpha is not None:
+                composite = Image.composite(user_img, composite, user_alpha)
 
             # Clamp to max resolution if needed
             composite = self._clamp_resolution(composite)
