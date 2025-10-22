@@ -8,7 +8,7 @@ import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
-from PIL import Image, ImageFilter
+from PIL import Image, ImageFilter, ImageDraw
 
 from .. import config
 
@@ -274,7 +274,7 @@ class StableVITONEngine:
 
         # Anchor near upper third; add small jitter per frame
         base_x = (u_w - target_w) // 2
-        base_y = max(0, int(u_h * 0.25) - target_h // 8)
+        base_y = max(0, int(u_h * 0.3) - target_h // 8)
 
         rng = random.Random(123)
         frames: List[bytes] = []
@@ -299,9 +299,14 @@ class StableVITONEngine:
             else:
                 composite.paste(rotated, paste_xy)
 
-            # Put person on top where available (occlusion)
+            # Put head/upper-body on top for occlusion using a truncated alpha mask
             if user_alpha is not None:
-                composite = Image.composite(user_img, composite, user_alpha)
+                # Truncate alpha below a cutoff to avoid hiding the garment torso
+                y_cut = min(user_img.height, paste_xy[1] + int(target_h * 0.35))
+                head_mask = user_alpha.copy()
+                draw = ImageDraw.Draw(head_mask)
+                draw.rectangle([(0, y_cut), (user_img.width, user_img.height)], fill=0)
+                composite = Image.composite(user_img, composite, head_mask)
 
             # Clamp to max resolution if needed
             composite = self._clamp_resolution(composite)
