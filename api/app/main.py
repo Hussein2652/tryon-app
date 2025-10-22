@@ -113,6 +113,10 @@ async def tryon_preview(
     sku: Optional[str] = Form(default=None),
     size: Optional[str] = Form(default=None),
     pose_set: Optional[str] = Form(default=None),
+    diffusion_steps: Optional[int] = Form(default=None),
+    diffusion_guidance: Optional[float] = Form(default=None),
+    diffusion_strength: Optional[float] = Form(default=None),
+    diffusion_safety: Optional[bool] = Form(default=None),
     pipeline: TryOnPipeline = Depends(get_tryon_pipeline),
 ):
     user_photo_bytes = await user_photo.read()
@@ -134,6 +138,17 @@ async def tryon_preview(
             detail=[issue.__dict__ for issue in qa_issues],
         )
 
+    # Collect diffusion overrides (only include provided values)
+    diffusion_params = {}
+    if diffusion_steps is not None:
+        diffusion_params["steps"] = diffusion_steps
+    if diffusion_guidance is not None:
+        diffusion_params["guidance"] = diffusion_guidance
+    if diffusion_strength is not None:
+        diffusion_params["strength"] = diffusion_strength
+    if diffusion_safety is not None:
+        diffusion_params["safety_checker"] = diffusion_safety
+
     result = pipeline.run(
         user_photo=user_photo_bytes,
         garment_front=garment_front_bytes,
@@ -141,6 +156,7 @@ async def tryon_preview(
         sku=sku,
         size=size,
         pose_set=pose_set,
+        diffusion_params=diffusion_params or None,
     )
 
     images_payload = [
@@ -168,6 +184,10 @@ async def tryon_compare(
     size_a: str = Form(...),
     size_b: str = Form(...),
     pose_set: Optional[str] = Form(default=None),
+    diffusion_steps: Optional[int] = Form(default=None),
+    diffusion_guidance: Optional[float] = Form(default=None),
+    diffusion_strength: Optional[float] = Form(default=None),
+    diffusion_safety: Optional[bool] = Form(default=None),
     pipeline: TryOnPipeline = Depends(get_tryon_pipeline),
 ):
     user_photo_bytes = await user_photo.read()
@@ -182,6 +202,16 @@ async def tryon_compare(
             detail="garment_front is empty.",
         )
 
+    diffusion_params = {}
+    if diffusion_steps is not None:
+        diffusion_params["steps"] = diffusion_steps
+    if diffusion_guidance is not None:
+        diffusion_params["guidance"] = diffusion_guidance
+    if diffusion_strength is not None:
+        diffusion_params["strength"] = diffusion_strength
+    if diffusion_safety is not None:
+        diffusion_params["safety_checker"] = diffusion_safety
+
     result_a = pipeline.run(
         user_photo=user_photo_bytes,
         garment_front=garment_front_bytes,
@@ -189,6 +219,7 @@ async def tryon_compare(
         sku=sku,
         size=size_a,
         pose_set=pose_set,
+        diffusion_params=diffusion_params or None,
     )
     result_b = pipeline.run(
         user_photo=user_photo_bytes,
@@ -197,6 +228,7 @@ async def tryon_compare(
         sku=sku,
         size=size_b,
         pose_set=pose_set,
+        diffusion_params=diffusion_params or None,
     )
 
     def payload_from(result):

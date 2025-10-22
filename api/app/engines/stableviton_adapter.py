@@ -53,6 +53,11 @@ class EngineInputs:
     sku: Optional[str]
     size: Optional[str]
     artifacts: Optional["PreprocessArtifacts"] = None
+    # Diffusion overrides
+    steps: Optional[int] = None
+    guidance: Optional[float] = None
+    strength: Optional[float] = None
+    safety_checker: Optional[bool] = None
 
 
 class StableVITONEngine:
@@ -139,12 +144,18 @@ class StableVITONEngine:
         dtype = torch.float16 if (self.cfg.use_fp16 and device == "cuda") else torch.float32
 
         controlnet = ControlNetModel.from_pretrained(str(controlnet_dir), torch_dtype=dtype)
-        pipe = StableDiffusionControlNetImg2ImgPipeline.from_pretrained(
-            str(sd15_dir),
+        safety_flag = inputs.safety_checker
+        if safety_flag is None:
+            safety_flag = config.SAFETY_CHECKER_ENABLED
+        pipe_kwargs = dict(
             controlnet=controlnet,
             torch_dtype=dtype,
-            safety_checker=None,
-            feature_extractor=None,
+        )
+        if not safety_flag:
+            pipe_kwargs.update(dict(safety_checker=None, feature_extractor=None))
+        pipe = StableDiffusionControlNetImg2ImgPipeline.from_pretrained(
+            str(sd15_dir),
+            **pipe_kwargs,  # type: ignore[arg-type]
         )
         pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
         pipe = pipe.to(device)
@@ -191,14 +202,17 @@ class StableVITONEngine:
         for i in range(count):
             g = torch.Generator(device=device).manual_seed(base_seed + i)
             try:
+                steps = inputs.steps if inputs.steps is not None else config.DIFFUSION_STEPS
+                guidance = inputs.guidance if inputs.guidance is not None else config.DIFFUSION_GUIDANCE
+                strength = inputs.strength if inputs.strength is not None else config.DIFFUSION_STRENGTH
                 result = pipe(
                     prompt=prompt,
                     negative_prompt=negative,
                     image=comp_images[i % len(comp_images)],
                     control_image=control_image,
-                    num_inference_steps=25,
-                    guidance_scale=7.5,
-                    strength=0.2,
+                    num_inference_steps=int(steps),
+                    guidance_scale=float(guidance),
+                    strength=float(strength),
                     generator=g,
                 )
             except Exception as exc:  # pylint: disable=broad-except
@@ -318,6 +332,7 @@ def run_stableviton(
     sku: Optional[str] = None,
     size: Optional[str] = None,
     artifacts: Optional["PreprocessArtifacts"] = None,
+    diffusion_params: Optional[Dict[str, Any]] = None,
 ) -> List[bytes]:
     """Run StableVITON (or compositor) to generate pose-aligned garment renders."""
 
@@ -329,6 +344,7 @@ def run_stableviton(
         max_res=config.MAX_RENDER_RES,
     )
     engine = _get_engine(engine_cfg)
+    dp = diffusion_params or {}
     inputs = EngineInputs(
         user_png=user_png,
         garment_png=garment_png,
@@ -338,5 +354,9 @@ def run_stableviton(
         sku=sku,
         size=size,
         artifacts=artifacts,
+        steps=dp.get("steps"),
+        guidance=dp.get("guidance"),
+        strength=dp.get("strength"),
+        safety_checker=dp.get("safety_checker"),
     )
     return engine.run(inputs)

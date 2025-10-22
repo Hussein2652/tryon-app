@@ -24,6 +24,12 @@ SD15_MODEL_ID = os.environ.get("SD15_MODEL_ID", "runwayml/stable-diffusion-v1-5"
 USE_FP16 = os.environ.get("TRYON_USE_FP16", "1") == "1"
 MAX_RENDER_RES = int(os.environ.get("TRYON_MAX_RES", "768"))
 
+# Diffusion control knobs
+DIFFUSION_STEPS = int(os.environ.get("TRYON_DIFFUSION_STEPS", "35"))
+DIFFUSION_GUIDANCE = float(os.environ.get("TRYON_DIFFUSION_GUIDANCE", "7.5"))
+DIFFUSION_STRENGTH = float(os.environ.get("TRYON_DIFFUSION_STRENGTH", "0.2"))
+SAFETY_CHECKER_ENABLED = os.environ.get("TRYON_SAFETY_CHECKER", "0") in {"1", "true", "True"}
+
 _DEFAULT_CORS_ORIGINS = [
     "http://localhost",
     "http://localhost:3000",

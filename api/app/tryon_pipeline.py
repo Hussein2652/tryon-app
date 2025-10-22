@@ -6,7 +6,7 @@ import random
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -60,6 +60,7 @@ class TryOnPipeline:
         sku: Optional[str],
         size: Optional[str],
         pose_set: Optional[str],
+        diffusion_params: Optional[Dict[str, Any]] = None,
     ) -> TryOnResult:
         pose_set_key = pose_set or DEFAULT_POSE_SET
         cache_key = self._build_cache_key(
@@ -69,6 +70,7 @@ class TryOnPipeline:
             sku=sku,
             size=size,
             pose_set=pose_set_key,
+            diffusion_params=diffusion_params,
         )
 
         artifacts = None
@@ -91,6 +93,7 @@ class TryOnPipeline:
                 size=size,
                 pose_map=pose_map_bytes,
                 artifacts=artifacts,
+                diffusion_params=diffusion_params,
             )
         else:
             image_paths = self._ensure_placeholder_outputs(
@@ -139,6 +142,7 @@ class TryOnPipeline:
         sku: Optional[str],
         size: Optional[str],
         pose_set: str,
+        diffusion_params: Optional[Dict[str, Any]],
     ) -> str:
         parts = [
             f"v={self.model_version}".encode("utf-8"),
@@ -157,7 +161,22 @@ class TryOnPipeline:
         # regenerate frames instead of reusing compositor outputs.
         parts.append(f"engine={self.engine_mode}".encode("utf-8"))
         parts.append(self._engine_readiness_sig().encode("utf-8"))
+        parts.extend(self._diffusion_sig_parts(diffusion_params))
         return stable_content_hash(parts, prefix="tryon:")
+
+    @staticmethod
+    def _diffusion_sig_parts(params: Optional[Dict[str, Any]]) -> List[bytes]:
+        sig: List[bytes] = []
+        if not params:
+            # Include environment defaults so cache updates when env tuning changes
+            sig.append(f"steps={app_config.DIFFUSION_STEPS}".encode("utf-8"))
+            sig.append(f"guidance={app_config.DIFFUSION_GUIDANCE}".encode("utf-8"))
+            sig.append(f"strength={app_config.DIFFUSION_STRENGTH}".encode("utf-8"))
+            return sig
+        for key in ("steps", "guidance", "strength"):
+            if key in params and params[key] is not None:
+                sig.append(f"{key}={params[key]}".encode("utf-8"))
+        return sig
 
     def _engine_readiness_sig(self) -> str:
         if self.engine_mode == ENGINE_STABLEVITON:
@@ -201,6 +220,7 @@ class TryOnPipeline:
         size: Optional[str],
         pose_map: Optional[bytes],
         artifacts: Optional[object],
+        diffusion_params: Optional[Dict[str, Any]],
     ) -> List[Path]:
         try:
             from .engines.stableviton_adapter import run_stableviton
@@ -229,6 +249,7 @@ class TryOnPipeline:
             sku=sku,
             size=size,
             artifacts=artifacts,
+            diffusion_params=diffusion_params,
         )
         if not frames:
             raise RuntimeError("StableVITON adapter returned no frames.")
