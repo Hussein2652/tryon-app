@@ -11,3 +11,4 @@ models/controlnet_openpose/
 models/schp_drive/
 models/instantid_antelope/
 models/controlnet/
+models/instantid/
