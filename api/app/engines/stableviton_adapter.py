@@ -157,7 +157,17 @@ class StableVITONEngine:
         except Exception:
             pass
 
+        # Build an initial image that already contains the garment overlay
+        # to make diffusion harmonize rather than hallucinate clothing.
+        # Falls back to the raw user image if compositor fails.
         user_img = Image.open(io.BytesIO(inputs.user_png)).convert("RGB")
+        try:
+            comp_bytes_list = self._infer_compositor(inputs)
+            comp_images: List[Image.Image] = [
+                Image.open(io.BytesIO(b)).convert("RGB") for b in comp_bytes_list
+            ]
+        except Exception:  # pragma: no cover - compositor is robust but keep guardrails
+            comp_images = [user_img]
         if inputs.pose_map:
             control_image = Image.open(io.BytesIO(inputs.pose_map)).convert("RGB")
         elif inputs.artifacts and getattr(inputs.artifacts.pose, "pose_map", None) is not None:
@@ -176,7 +186,7 @@ class StableVITONEngine:
         negative = "blurry, lowres, deformed, extra limbs, bad hands, text"
 
         frames: List[bytes] = []
-        count = max(1, FALLBACK_FRAME_COUNT)
+        count = max(1, min(FALLBACK_FRAME_COUNT, len(comp_images) or 1))
         base_seed = 24681357
         for i in range(count):
             g = torch.Generator(device=device).manual_seed(base_seed + i)
@@ -184,11 +194,11 @@ class StableVITONEngine:
                 result = pipe(
                     prompt=prompt,
                     negative_prompt=negative,
-                    image=user_img,
+                    image=comp_images[i % len(comp_images)],
                     control_image=control_image,
                     num_inference_steps=25,
                     guidance_scale=7.5,
-                    strength=0.35,
+                    strength=0.2,
                     generator=g,
                 )
             except Exception as exc:  # pylint: disable=broad-except

@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from .cache import write_cache
 from .config import ENGINE_MODE, OUTPUTS_DIR, NUM_TRYON_FRAMES
+from . import config as app_config
 from .metrics import observe_latency
 from .cv import PreprocessManager
 from .utils import stable_content_hash
@@ -151,8 +152,19 @@ class TryOnPipeline:
         if size:
             parts.append(f"size={size}".encode("utf-8"))
         parts.append(f"pose_set={pose_set}".encode("utf-8"))
+        # Include engine mode and readiness in the signature so that when
+        # diffusion assets become available, we produce a new cache key and
+        # regenerate frames instead of reusing compositor outputs.
         parts.append(f"engine={self.engine_mode}".encode("utf-8"))
+        parts.append(self._engine_readiness_sig().encode("utf-8"))
         return stable_content_hash(parts, prefix="tryon:")
+
+    def _engine_readiness_sig(self) -> str:
+        if self.engine_mode == ENGINE_STABLEVITON:
+            sd_ok = (app_config.SD15_MODEL_DIR / ".complete").exists()
+            cn_ok = (app_config.CONTROLNET_OPENPOSE_DIR / "config.json").exists()
+            return f"sv_ready={int(sd_ok and cn_ok)}"
+        return "sv_ready=0"
 
     def _ensure_placeholder_outputs(
         self,
