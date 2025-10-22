@@ -2,9 +2,9 @@
 set -euo pipefail
 
 if [[ "${DOWNLOAD_MODELS_ON_START:-0}" = "1" || "${DOWNLOAD_MODELS_ON_START:-false}" = "true" ]]; then
-  echo "[entrypoint] Checking/downloading models into ${TRYON_MODELS_DIR:-/models}..."
-  python /app/scripts/download_models.py || echo "[entrypoint] Model download script failed; continuing"
+  echo "[entrypoint] Checking/downloading models into ${TRYON_MODELS_DIR:-/models} (non-blocking)..."
+  # Run in background to avoid blocking API startup; logs to stdout
+  (python /app/scripts/download_models.py || echo "[entrypoint] Model download script failed; continuing") &
 fi
 
 exec "$@"
-

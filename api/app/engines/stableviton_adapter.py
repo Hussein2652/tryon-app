@@ -104,9 +104,11 @@ class StableVITONEngine:
         try:
             if self._model is not None:
                 return self._infer_real(inputs)
-        except StableVITONNotReady:
+        except StableVITONNotReady as exc:
             # Fall back to compositor if real pipeline signals not ready.
-            logger.warning("StableVITON not ready; falling back to compositor.")
+            logger.warning("StableVITON not ready; falling back to compositor. %s", exc)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.exception("StableVITON real path failed; using compositor. %s", exc)
         return self._infer_compositor(inputs)
 
     def _infer_real(self, inputs: EngineInputs) -> List[bytes]:
@@ -124,10 +126,10 @@ class StableVITONEngine:
         # Validate assets
         from pathlib import Path
 
-        controlnet_path = Path(self.cfg.controlnet_dir) / "control_v11p_sd15_openpose.safetensors"
+        controlnet_dir = Path(self.cfg.controlnet_dir)
         sd15_dir = config.SD15_MODEL_DIR
-        if not controlnet_path.exists():
-            raise StableVITONNotReady(f"Missing ControlNet OpenPose at {controlnet_path}")
+        if not (controlnet_dir.exists() and (controlnet_dir / "config.json").exists()):
+            raise StableVITONNotReady(f"Missing ControlNet OpenPose repo at {controlnet_dir}")
         if not (sd15_dir.exists() and (sd15_dir / "model_index.json").exists()):
             raise StableVITONNotReady(
                 f"Missing SD1.5 model in diffusers format at {sd15_dir}."
@@ -136,7 +138,7 @@ class StableVITONEngine:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         dtype = torch.float16 if (self.cfg.use_fp16 and device == "cuda") else torch.float32
 
-        controlnet = ControlNetModel.from_single_file(str(controlnet_path), torch_dtype=dtype)
+        controlnet = ControlNetModel.from_pretrained(str(controlnet_dir), torch_dtype=dtype)
         pipe = StableDiffusionControlNetImg2ImgPipeline.from_pretrained(
             str(sd15_dir),
             controlnet=controlnet,

@@ -79,7 +79,13 @@ def download_repo_snapshot(repo_id: str, destination: Path) -> None:
     if snapshot_download is None:
         raise RuntimeError("huggingface_hub is not installed")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    snapshot_download(repo_id=repo_id, local_dir=destination, local_dir_use_symlinks=False)
+    snapshot_download(
+        repo_id=repo_id,
+        local_dir=destination,
+        local_dir_use_symlinks=False,
+        resume_download=True,
+        max_workers=4,
+    )
 
 
 def download_http(url: str, destination: Path) -> None:
@@ -89,20 +95,22 @@ def download_http(url: str, destination: Path) -> None:
 
 
 def download_controlnet_openpose() -> DownloadTask:
-    dest = CONTROLNET_DIR / "control_v11p_sd15_openpose.safetensors"
+    # Snapshot the full repo so config.json is present for from_pretrained
+    dest = CONTROLNET_DIR / "config.json"
 
     def action() -> None:
         url = os.environ.get("CONTROLNET_OPENPOSE_URL", "")
         if url:
-            # Save as friendly name regardless of source filename
-            download_http(url, dest)
+            # If a direct file URL is provided, place the safetensors and try to fetch config.json too
+            weights = CONTROLNET_DIR / "control_v11p_sd15_openpose.safetensors"
+            download_http(url, weights)
+            # Best-effort: also try to grab config.json from HF
+            try:
+                download_with_hf("lllyasviel/control_v11p_sd15_openpose", "config.json", dest)
+            except Exception:
+                pass
         else:
-            # Default file name on this repo is diffusion_pytorch_model.safetensors
-            download_with_hf(
-                "lllyasviel/control_v11p_sd15_openpose",
-                "diffusion_pytorch_model.safetensors",
-                dest,
-            )
+            download_repo_snapshot("lllyasviel/control_v11p_sd15_openpose", CONTROLNET_DIR)
 
     return DownloadTask("ControlNet OpenPose", dest, action)
 
