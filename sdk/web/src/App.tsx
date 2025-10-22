@@ -42,6 +42,7 @@ export default function App() {
   } | null>(null);
   const [tryOnLoading, setTryOnLoading] = useState(false);
   const [tryOnIssues, setTryOnIssues] = useState<string | null>(null);
+  const [showDebug, setShowDebug] = useState<boolean>(false);
 
   const poses = useMemo(() => tryOnResult?.images ?? [], [tryOnResult]);
 
@@ -79,6 +80,7 @@ export default function App() {
       formData.append("diffusion_guidance", String(guidance));
       formData.append("diffusion_strength", String(strength));
       formData.append("diffusion_safety", String(safety));
+      formData.append("debug_layers", String(showDebug));
       const data = await requestTryOn(formData);
       setTryOnResult({
         cacheKey: data.cache_key,
@@ -117,6 +119,7 @@ export default function App() {
       formData.append("diffusion_guidance", String(guidance));
       formData.append("diffusion_strength", String(strength));
       formData.append("diffusion_safety", String(safety));
+      formData.append("debug_layers", String(showDebug));
       const data = await requestTryOnCompare(formData);
       setCompareResult({
         sizeA: data.size_a,
@@ -271,6 +274,11 @@ export default function App() {
             <input type="checkbox" checked={safety}
                    onChange={(e) => setSafety(e.target.checked)} />
           </label>
+          <label>
+            Show pose/mask overlays
+            <input type="checkbox" checked={showDebug}
+                   onChange={(e) => setShowDebug(e.target.checked)} />
+          </label>
           <button type="submit" disabled={tryOnLoading}>
             {tryOnLoading ? "Rendering…" : "Preview"}
           </button>
@@ -292,6 +300,16 @@ export default function App() {
                 </div>
               ))}
             </div>
+            {showDebug && (tryOnResult as any) && (tryOnResult as any).debug && (
+              <div className="poses" style={{ marginTop: "1rem" }}>
+                {(tryOnResult as any).debug.pose && (
+                  <div className="pose-card"><img src={(tryOnResult as any).debug.pose} alt="Pose map" /><span>Pose map</span></div>
+                )}
+                {(tryOnResult as any).debug.alpha && (
+                  <div className="pose-card"><img src={(tryOnResult as any).debug.alpha} alt="Alpha mask" /><span>Alpha mask</span></div>
+                )}
+              </div>
+            )}
           </div>
         )}
         {compareResult && (

@@ -33,6 +33,7 @@ class TryOnResult:
     image_paths: List[Path]
     frame_scores: List[float]
     confidence_avg: float
+    debug_paths: Optional[dict]
 
 
 class TryOnPipeline:
@@ -61,6 +62,7 @@ class TryOnPipeline:
         size: Optional[str],
         pose_set: Optional[str],
         diffusion_params: Optional[Dict[str, Any]] = None,
+        debug: Optional[bool] = None,
     ) -> TryOnResult:
         pose_set_key = pose_set or DEFAULT_POSE_SET
         cache_key = self._build_cache_key(
@@ -82,6 +84,7 @@ class TryOnPipeline:
 
         start_time = time.perf_counter()
 
+        debug_paths: Optional[dict] = None
         if self.engine_mode == ENGINE_STABLEVITON:
             image_paths = self._ensure_stableviton_outputs(
                 cache_key=cache_key,
@@ -95,6 +98,18 @@ class TryOnPipeline:
                 artifacts=artifacts,
                 diffusion_params=diffusion_params,
             )
+            if (debug or False) and artifacts is not None:
+                debug_paths = {}
+                if artifacts.pose.pose_map is not None:
+                    pose_path = OUTPUTS_DIR / f"tryon_{cache_key}_pose.png"
+                    if not pose_path.exists():
+                        artifacts.pose.pose_map.save(pose_path)
+                    debug_paths["pose"] = pose_path
+                if artifacts.segmentation.alpha_mask is not None:
+                    alpha_path = OUTPUTS_DIR / f"tryon_{cache_key}_alpha.png"
+                    if not alpha_path.exists():
+                        artifacts.segmentation.alpha_mask.save(alpha_path)
+                    debug_paths["alpha"] = alpha_path
         else:
             image_paths = self._ensure_placeholder_outputs(
                 cache_key=cache_key,
@@ -131,6 +146,7 @@ class TryOnPipeline:
             image_paths=image_paths,
             frame_scores=frame_scores,
             confidence_avg=round(confidence_avg, 2),
+            debug_paths=debug_paths,
         )
 
     def _build_cache_key(

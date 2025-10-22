@@ -117,6 +117,7 @@ async def tryon_preview(
     diffusion_guidance: Optional[float] = Form(default=None),
     diffusion_strength: Optional[float] = Form(default=None),
     diffusion_safety: Optional[bool] = Form(default=None),
+    debug_layers: Optional[bool] = Form(default=None),
     pipeline: TryOnPipeline = Depends(get_tryon_pipeline),
 ):
     user_photo_bytes = await user_photo.read()
@@ -157,6 +158,7 @@ async def tryon_preview(
         size=size,
         pose_set=pose_set,
         diffusion_params=diffusion_params or None,
+        debug=debug_layers,
     )
 
     images_payload = [
@@ -172,6 +174,14 @@ async def tryon_preview(
         "frame_scores": result.frame_scores,
         "confidence_avg": round(result.confidence_avg, 2),
     }
+    if result.debug_paths:
+        debug_payload = {}
+        if result.debug_paths.get("pose"):
+            debug_payload["pose"] = f"/outputs/{result.debug_paths['pose'].name}"
+        if result.debug_paths.get("alpha"):
+            debug_payload["alpha"] = f"/outputs/{result.debug_paths['alpha'].name}"
+        if debug_payload:
+            payload["debug"] = debug_payload
     return JSONResponse(status_code=status.HTTP_200_OK, content=payload)
 
 

@@ -27,6 +27,7 @@ export interface TryOnResponse {
   images: string[];
   frame_scores: number[];
   confidence_avg: number;
+  debug?: { pose?: string; alpha?: string };
 }
 
 export async function requestTryOn(formData: FormData): Promise<TryOnResponse> {

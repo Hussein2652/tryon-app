@@ -17,11 +17,7 @@ class IdentityEmbedding:
 
 
 class IdentityEncoder:
-    """Lightweight identity embedding with optional InstantID.
-
-    If InstantID/InsightFace assets are unavailable, falls back to a
-    ResNet18-based global feature embedding to stabilize identity across frames.
-    """
+    """Identity embedding with ONNXRuntime InstantID (antelopev2) or ResNet18 fallback."""
 
     def __init__(self, weights_dir: str) -> None:
         self.weights_dir = weights_dir
@@ -30,6 +26,7 @@ class IdentityEncoder:
         self._model = None
         self._preprocess = None
         self._mode = "fallback"
+        self._onnx_session = None
 
     def ensure_loaded(self) -> None:
         if self._loaded:
@@ -37,7 +34,21 @@ class IdentityEncoder:
         with self._lock:
             if self._loaded:
                 return
-            # Try fallback first (reliable, minimal deps)
+            # Try ONNXRuntime + antelopev2 first
+            try:
+                import onnxruntime as ort  # type: ignore
+                import os
+                glintr = os.path.join(self.weights_dir, "antelopev2", "glintr100.onnx")
+                if os.path.exists(glintr):
+                    logger.info("Loading ONNXRuntime InstantID embedding: %s", glintr)
+                    self._onnx_session = ort.InferenceSession(glintr, providers=["CUDAExecutionProvider", "CPUExecutionProvider"])  # type: ignore
+                    self._mode = "onnx"
+                    self._loaded = True
+                    return
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning("ONNX InstantID unavailable: %s", exc)
+
+            # Fallback: ResNet18 (reliable, minimal deps)
             try:
                 from torchvision import models, transforms  # type: ignore
                 import torch  # type: ignore
@@ -57,8 +68,38 @@ class IdentityEncoder:
                 self._model = None
                 self._loaded = True
 
+    def _embed_onnx(self, rgb: Image.Image) -> Optional[list[float]]:
+        try:
+            import numpy as np  # type: ignore
+            import cv2  # type: ignore
+        except Exception as exc:  # pragma: no cover
+            logger.warning("ONNX embedding prerequisites missing: %s", exc)
+            return None
+        if self._onnx_session is None:
+            return None
+        # Simple center-crop to square and resize to 112x112, normalize to [-1, 1]
+        w, h = rgb.size
+        side = min(w, h)
+        left = (w - side) // 2
+        top = (h - side) // 2
+        crop = rgb.crop((left, top, left + side, top + side)).resize((112, 112))
+        arr = np.asarray(crop)[:, :, ::-1].astype("float32")  # BGR
+        arr = (arr - 127.5) / 128.0
+        arr = np.transpose(arr, (2, 0, 1))[None, ...]
+        try:
+            outputs = self._onnx_session.run(None, {self._onnx_session.get_inputs()[0].name: arr})
+            vec = outputs[0].reshape(-1).astype("float32")
+            return vec.tolist()
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("ONNX embedding failed: %s", exc)
+            return None
+
     def embed(self, rgb_image: Image.Image) -> IdentityEmbedding:
         self.ensure_loaded()
+        if self._mode == "onnx":
+            vec = self._embed_onnx(rgb_image)
+            if vec is not None:
+                return IdentityEmbedding(vector=vec)
         if self._model is None or self._preprocess is None:
             return IdentityEmbedding(vector=None)
         try:
