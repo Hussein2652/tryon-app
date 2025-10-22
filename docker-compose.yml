@@ -19,8 +19,11 @@ services:
       - TRYON_UPLOADS_DIR=/app/api/uploads
       - TRYON_MODELS_DIR=/models
       - DOWNLOAD_MODELS_ON_START=${DOWNLOAD_MODELS_ON_START:-1}
+      - SD15_MODEL_DIR=${SD15_MODEL_DIR:-/models/sd15}
+      - SD15_MODEL_ID=${SD15_MODEL_ID:-runwayml/stable-diffusion-v1-5}
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - STABLEVITON_SHAREPOINT_URL
+      - CONTROLNET_OPENPOSE_URL
       - SCHP_DRIVE_URL
       - INSTANTID_ANTELOPE_URL
       - HUGGINGFACE_HUB_TOKEN

@@ -5,3 +5,9 @@ api/logs/
 sdk/web/node_modules/
 sdk/web/dist/
 .env
+models/sd15/
+models/stableviton/
+models/controlnet_openpose/
+models/schp_drive/
+models/instantid_antelope/
+models/controlnet/
