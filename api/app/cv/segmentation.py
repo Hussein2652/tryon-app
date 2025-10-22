@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import io
 import logging
 import threading
 from dataclasses import dataclass
 from typing import Optional
 
+import numpy as np
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ class SegmentationNotReady(RuntimeError):
 
 @dataclass
 class SegmentationResult:
-    """Placeholder structure to hold segmentation results."""
+    """Segmentation outputs used by the pipeline."""
 
     alpha_mask: Image.Image
     face_mask: Optional[Image.Image]
@@ -25,13 +25,19 @@ class SegmentationResult:
 
 
 class SegmentationEngine:
-    """SCHP-based segmentation with graceful fallback."""
+    """Person segmentation via torchvision with fallback.
+
+    This approximates SCHP using torchvision DeepLabV3 to extract a person mask.
+    It is light-weight and avoids custom HRNet code while still improving
+    compositing/occlusion.
+    """
 
     def __init__(self, weights_path: str) -> None:
         self.weights_path = weights_path
         self._lock = threading.Lock()
         self._loaded = False
         self._model = None
+        self._preprocess = None
 
     def ensure_loaded(self) -> None:
         if self._loaded:
@@ -41,20 +47,15 @@ class SegmentationEngine:
                 return
             try:
                 import torch  # type: ignore
+                from torchvision import models, transforms  # type: ignore
 
-                # Placeholder for actual SCHP/HRNet weights load.
-                if not self.weights_path or self.weights_path == "None":
-                    raise FileNotFoundError("SCHP weights path not set.")
-                logger.info("Loading SCHP weights from %s", self.weights_path)
-                # TODO: Implement real model loading (HRNet + classification head)
-                self._model = object()
+                logger.info("Loading torchvision DeepLabV3 for person segmentation")
+                weights = models.segmentation.DeepLabV3_ResNet50_Weights.DEFAULT
+                self._model = models.segmentation.deeplabv3_resnet50(weights=weights).eval()
+                self._preprocess = weights.transforms()
                 self._loaded = True
-            except FileNotFoundError as exc:
-                logger.warning("SCHP weights missing: %s", exc)
-                self._model = None
-                self._loaded = True
-            except ImportError:
-                logger.warning("PyTorch not available; SCHP segmentation disabled.")
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning("Segmentation model unavailable; falling back. %s", exc)
                 self._model = None
                 self._loaded = True
 
@@ -62,15 +63,21 @@ class SegmentationEngine:
         self.ensure_loaded()
         if self._model is None:
             return self.fallback(rgb_image)
-        raise SegmentationNotReady(
-            "Segmentation model loaded but forward pass is not implemented yet."
-        )
+        try:
+            import torch  # type: ignore
+
+            img_tensor = self._preprocess(rgb_image).unsqueeze(0)
+            with torch.no_grad():
+                out = self._model(img_tensor)["out"][0]
+            person_class = 15  # COCO person
+            mask = (out.argmax(0).cpu().numpy() == person_class).astype(np.uint8) * 255
+            alpha = Image.fromarray(mask, mode="L").resize(rgb_image.size, Image.BILINEAR)
+            return SegmentationResult(alpha_mask=alpha, face_mask=None, hand_mask=None)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("Segmentation inference failed; using fallback. %s", exc)
+            return self.fallback(rgb_image)
 
     @staticmethod
     def fallback(rgb_image: Image.Image) -> SegmentationResult:
         alpha = Image.new("L", rgb_image.size, 255)
-        return SegmentationResult(
-            alpha_mask=alpha,
-            face_mask=None,
-            hand_mask=None,
-        )
+        return SegmentationResult(alpha_mask=alpha, face_mask=None, hand_mask=None)

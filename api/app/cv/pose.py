@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import io
 import logging
 import threading
 from dataclasses import dataclass
@@ -18,7 +17,7 @@ class PoseResult:
 
 
 class PoseEstimator:
-    """OpenPose / SMPL-X pose estimator with fallback."""
+    """OpenPose via controlnet-aux with graceful fallback."""
 
     def __init__(self, controlnet_dir: str) -> None:
         self.controlnet_dir = controlnet_dir
@@ -33,20 +32,15 @@ class PoseEstimator:
             if self._loaded:
                 return
             try:
-                import controlnet_aux  # type: ignore
+                # controlnet-aux provides an OpenposeDetector that outputs a pose map image
+                from controlnet_aux.open_pose import OpenposeDetector  # type: ignore
 
-                if not self.controlnet_dir or self.controlnet_dir == "None":
-                    raise FileNotFoundError("ControlNet OpenPose directory not configured.")
-                logger.info("Preparing OpenPose ControlNet assets from %s", self.controlnet_dir)
-                # TODO: load actual OpenPose / ControlNet pipeline
-                self._model = object()
+                logger.info("Loading OpenposeDetector from controlnet-aux")
+                # Using default weights shipped by controlnet-aux; this may download on first use
+                self._model = OpenposeDetector.from_pretrained("lllyasviel/ControlNet")
                 self._loaded = True
-            except FileNotFoundError as exc:
-                logger.warning("ControlNet assets missing: %s", exc)
-                self._model = None
-                self._loaded = True
-            except ImportError:
-                logger.warning("controlnet-aux not available; pose estimation disabled.")
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning("controlnet-aux unavailable or failed to load: %s", exc)
                 self._model = None
                 self._loaded = True
 
@@ -54,7 +48,13 @@ class PoseEstimator:
         self.ensure_loaded()
         if self._model is None:
             return self.fallback(rgb_image.size)
-        raise RuntimeError("Pose estimation not implemented yet for the loaded model.")
+        try:
+            # Detector accepts PIL.Image and returns a PIL.Image pose map
+            pose_map = self._model(rgb_image)
+            return PoseResult(keypoints=None, pose_map=pose_map.convert("RGB"))
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("Openpose inference failed (%s); using fallback pose map.", exc)
+            return self.fallback(rgb_image.size)
 
     @staticmethod
     def fallback(size: tuple[int, int]) -> PoseResult:

@@ -22,6 +22,12 @@ export default function App() {
 
   const [userFile, setUserFile] = useState<File | null>(null);
   const [garmentFile, setGarmentFile] = useState<File | null>(null);
+  const [garmentMask, setGarmentMask] = useState<File | null>(null);
+  // Diffusion controls
+  const [steps, setSteps] = useState<number>(40);
+  const [guidance, setGuidance] = useState<number>(7.5);
+  const [strength, setStrength] = useState<number>(0.18);
+  const [safety, setSafety] = useState<boolean>(false);
   const [tryOnResult, setTryOnResult] = useState<{
     cacheKey: string;
     images: string[];
@@ -65,9 +71,14 @@ export default function App() {
       const formData = new FormData();
       formData.append("user_photo", userFile);
       formData.append("garment_front", garmentFile);
+      if (garmentMask) formData.append("garment_mask", garmentMask);
       formData.append("sku", "SKU123");
       const recommended = (sizeResult as any)?.recommended_size ?? "M";
       formData.append("size", String(recommended));
+      formData.append("diffusion_steps", String(steps));
+      formData.append("diffusion_guidance", String(guidance));
+      formData.append("diffusion_strength", String(strength));
+      formData.append("diffusion_safety", String(safety));
       const data = await requestTryOn(formData);
       setTryOnResult({
         cacheKey: data.cache_key,
@@ -98,9 +109,14 @@ export default function App() {
       const formData = new FormData();
       formData.append("user_photo", userFile);
       formData.append("garment_front", garmentFile);
+      if (garmentMask) formData.append("garment_mask", garmentMask);
       formData.append("sku", "SKU123");
       formData.append("size_a", String(recommended));
       formData.append("size_b", String(nearestAlt));
+      formData.append("diffusion_steps", String(steps));
+      formData.append("diffusion_guidance", String(guidance));
+      formData.append("diffusion_strength", String(strength));
+      formData.append("diffusion_safety", String(safety));
       const data = await requestTryOnCompare(formData);
       setCompareResult({
         sizeA: data.size_a,
@@ -140,6 +156,10 @@ export default function App() {
   const bindGarmentFile = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
     setGarmentFile(file);
+  };
+  const bindGarmentMask = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setGarmentMask(file);
   };
 
   return (
@@ -226,6 +246,30 @@ export default function App() {
           <label>
             Garment Front PNG
             <input type="file" accept="image/png" onChange={bindGarmentFile} />
+          </label>
+          <label>
+            Garment Mask PNG (optional)
+            <input type="file" accept="image/png" onChange={bindGarmentMask} />
+          </label>
+          <label>
+            Steps
+            <input type="number" min={5} max={80} value={steps}
+                   onChange={(e) => setSteps(Number(e.target.value))} />
+          </label>
+          <label>
+            Guidance
+            <input type="number" step={0.1} min={3} max={12} value={guidance}
+                   onChange={(e) => setGuidance(Number(e.target.value))} />
+          </label>
+          <label>
+            Strength
+            <input type="number" step={0.01} min={0.05} max={0.9} value={strength}
+                   onChange={(e) => setStrength(Number(e.target.value))} />
+          </label>
+          <label>
+            Safety Checker
+            <input type="checkbox" checked={safety}
+                   onChange={(e) => setSafety(e.target.checked)} />
           </label>
           <button type="submit" disabled={tryOnLoading}>
             {tryOnLoading ? "Rendering…" : "Preview"}
