@@ -13,3 +13,5 @@ models/instantid_antelope/
 models/controlnet/
 models/instantid/
 models/schp/
+models/hf/
+models/torch/
