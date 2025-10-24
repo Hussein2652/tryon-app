@@ -23,7 +23,6 @@ services:
       # (e.g., torchvision resnet/deeplab) are not re-downloaded
       - TORCH_HOME=${TORCH_HOME:-/models/torch}
       - HF_HOME=${HF_HOME:-/models/hf}
-      - TRANSFORMERS_CACHE=${TRANSFORMERS_CACHE:-/models/hf}
       - HUGGINGFACE_HUB_CACHE=${HUGGINGFACE_HUB_CACHE:-/models/hf}
       - SD15_MODEL_DIR=${SD15_MODEL_DIR:-/models/sd15}
       - SD15_MODEL_ID=${SD15_MODEL_ID:-runwayml/stable-diffusion-v1-5}
