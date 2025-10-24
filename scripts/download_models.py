@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Callable, Optional
 import urllib.request
 import zipfile
+import subprocess
 
 
 try:
@@ -288,6 +289,19 @@ def main() -> None:
     # ---- V2 models (IDM-VTON + SDXL) ----
     # Use stamps to avoid repeating snapshots
     try:
+        # Clone IDM-VTON repo once (code lives under /third_party)
+        repo_stamp = stamp("idm_vton_repo")
+        repo_dir = Path("/third_party/idm_vton")
+        if not repo_stamp.exists():
+            repo_dir.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                subprocess.run(["git", "clone", "--depth", "1", "https://github.com/yisol/IDM-VTON", str(repo_dir)], check=True)
+                repo_stamp.touch()
+                print("[models] Cloned yisol/IDM-VTON -> /third_party/idm_vton")
+            except Exception as exc:  # pylint: disable=broad-except
+                print(f"[models][warning] Could not clone IDM-VTON repo: {exc}")
+        else:
+            print("[models] IDM-VTON repo already cloned (stamp present)")
         # IDM-VTON Space ckpt subtree
         name = "idm_vton_ckpt"
         if not stamp(name).exists():
