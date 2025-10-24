@@ -168,9 +168,21 @@ def download_instantid_files() -> list[DownloadTask]:
 
 def download_antelopev2() -> DownloadTask:
     extract_dir = INSTANTID_DIR / "antelopev2"
-    sentinel = extract_dir / "glintr100.onnx"
+    # Use a completion sentinel so we don't repeat extraction when files exist
+    complete_sentinel = extract_dir / ".complete"
 
     def action() -> None:
+        # If an .onnx already exists in the folder, just write the sentinel
+        try:
+            if extract_dir.exists():
+                for root, _, files in os.walk(extract_dir):
+                    if any(f.lower().endswith(".onnx") for f in files):
+                        complete_sentinel.parent.mkdir(parents=True, exist_ok=True)
+                        complete_sentinel.touch()
+                        return
+        except Exception:
+            pass
+
         # Try multiple sources until one succeeds
         url_env = os.environ.get(
             "INSTANTID_ANTELOPE_URL",
@@ -197,6 +209,7 @@ def download_antelopev2() -> DownloadTask:
                     raise RuntimeError("downloaded file is not a valid zip")
                 shutil.unpack_archive(zip_dest, extract_dir)
                 zip_dest.unlink(missing_ok=True)
+                complete_sentinel.touch()
                 break
             except Exception as exc:  # pylint: disable=broad-except
                 last_exc = exc
@@ -205,7 +218,7 @@ def download_antelopev2() -> DownloadTask:
         else:
             raise RuntimeError(f"antelopev2 download failed: {last_exc}")
 
-    return DownloadTask("InstantID antelopev2", sentinel, action)
+    return DownloadTask("InstantID antelopev2", complete_sentinel, action)
 
 
 def download_schp() -> DownloadTask:
