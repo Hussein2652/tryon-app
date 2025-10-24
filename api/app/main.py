@@ -3,11 +3,12 @@ from __future__ import annotations
 import logging
 import time
 from pathlib import Path
+import io
 from typing import Optional
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import (
@@ -26,6 +27,8 @@ from .sizing import (
     build_response,
 )
 from .tryon_pipeline import TryOnPipeline
+from server.tryon_v2 import TryOnV2Engine, TryOnV2Config
+from . import config as app_config
 
 
 logger = logging.getLogger(__name__)
@@ -87,6 +90,17 @@ async def healthz():
 @app.get("/metrics")
 async def metrics():
     return JSONResponse(status_code=status.HTTP_200_OK, content=snapshot())
+
+# V2 try-on engine singleton
+_V2_ENGINE: Optional[TryOnV2Engine] = None
+
+
+def get_v2_engine() -> TryOnV2Engine:
+    global _V2_ENGINE
+    if _V2_ENGINE is None:
+        cfg = TryOnV2Config(models_dir=app_config.MODELS_BASE_DIR, enable_instantid=False)
+        _V2_ENGINE = TryOnV2Engine(cfg)
+    return _V2_ENGINE
 
 
 @app.post("/size/recommend")
@@ -183,6 +197,30 @@ async def tryon_preview(
         if debug_payload:
             payload["debug"] = debug_payload
     return JSONResponse(status_code=status.HTTP_200_OK, content=payload)
+
+
+@app.post("/api/v2/tryon")
+async def tryon_v2(
+    person: UploadFile = File(...),
+    cloth: UploadFile = File(...),
+    category: str = Form(default="upper_body"),
+    steps: int = Form(default=30),
+    guidance: float = Form(default=5.0),
+    seed: int = Form(default=42),
+):
+    person_bytes = await person.read()
+    cloth_bytes = await cloth.read()
+    if not person_bytes or not cloth_bytes:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing person or cloth image.")
+    from PIL import Image
+    person_img = Image.open(io.BytesIO(person_bytes)).convert("RGB")
+    cloth_img = Image.open(io.BytesIO(cloth_bytes)).convert("RGBA")
+    engine = get_v2_engine()
+    image = engine.run(person=person_img, cloth=cloth_img, category=category, steps=steps, guidance=guidance, seed=seed)
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/png")
 
 
 @app.post("/tryon/compare")

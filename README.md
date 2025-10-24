@@ -95,6 +95,8 @@ Environment knobs (defaults in `api/app/config.py`):
 - `SCHP_WEIGHTS` – Semantic human parsing weights (LIP/CIHP).
 - `SD15_MODEL_DIR` – Diffusers-format Stable Diffusion 1.5 base model directory.
 - `SD15_MODEL_ID` – Hugging Face repo id to snapshot into `SD15_MODEL_DIR` (default `runwayml/stable-diffusion-v1-5`).
+- `HF_TOKEN` – Optional Hugging Face token used by the v2 downloader for gated repos.
+- `ENABLE_INSTANTID` – `0|1` gate for pulling/using InstantID (non‑commercial license).
 - `TRYON_USE_FP16` – `"1"` to enable fp16 inference when available.
 - `TRYON_MAX_RES` – Max render resolution (e.g., 768 or 1024).
 - `TRYON_CACHE_DIR`, `TRYON_LOG_DIR` – content cache + structured logs.
@@ -121,3 +123,18 @@ services:
 ```
 
 Assets hosted behind authentication (e.g., StableVITON SharePoint, SMPL-X) still require a valid link or a mounted volume; the script logs a warning when it cannot download them. SD1.5 is pulled from Hugging Face via `snapshot_download` when `DOWNLOAD_MODELS=true` (or on container start when `DOWNLOAD_MODELS_ON_START=1`) and saved under `SD15_MODEL_DIR`.
+## V2 Try‑On API (IDM‑VTON + SDXL fallback)
+
+- New endpoint: `POST /api/v2/tryon` (multipart)
+  - Inputs: `person` (image), `cloth` (image), `category` (str, default `upper_body`), `steps` (int), `guidance` (float), `seed` (int)
+  - Output: `image/png` composited try‑on.
+  - Behavior: tries IDM‑VTON (pretrained) first; falls back to SDXL‑inpaint + ControlNet if IDM‑VTON is not available.
+
+- Models auto‑download on container start into `/models` with stamps under `/models/_download_stamps`.
+  - IDM‑VTON ckpts: `spaces/yisol/IDM-VTON` → `/models/idm_vton/ckpt/`
+  - SDXL Inpaint: `diffusers/stable-diffusion-xl-1.0-inpainting-0.1`
+  - SDXL Refiner: `stabilityai/stable-diffusion-xl-refiner-1.0`
+  - ControlNets SDXL: OpenPose + SoftEdge
+  - DWPose pack: `yzd-v/DWPose`
+  - IP‑Adapter (SDXL): `h94/IP-Adapter`
+  - Optional InstantID: `InstantX/InstantID` (enable via `ENABLE_INSTANTID=1`)

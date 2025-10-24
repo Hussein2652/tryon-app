@@ -35,6 +35,8 @@ except ImportError:  # pragma: no cover - optional dependency
 
 
 BASE_MODELS_DIR = Path(os.environ.get("TRYON_MODELS_DIR", "/models"))
+DOWNLOAD_STAMPS = BASE_MODELS_DIR / "_download_stamps"
+DOWNLOAD_STAMPS.mkdir(parents=True, exist_ok=True)
 
 STABLEVITON_DIR = Path(os.environ.get("STABLEVITON_CKPT_DIR", BASE_MODELS_DIR / "stableviton"))
 CONTROLNET_DIR = Path(os.environ.get("CONTROLNET_OPENPOSE_DIR", BASE_MODELS_DIR / "controlnet" / "openpose"))
@@ -87,6 +89,11 @@ def download_repo_snapshot(repo_id: str, destination: Path) -> None:
         resume_download=True,
         max_workers=4,
     )
+
+
+def stamp(name: str) -> Path:
+    p = DOWNLOAD_STAMPS / f"{name}.ok"
+    return p
 
 
 def download_http(url: str, destination: Path) -> None:
@@ -277,6 +284,57 @@ def main() -> None:
             success_count += 1
 
     print(f"[models] Completed downloads. {success_count}/{len(tasks)} assets present.")
+
+    # ---- V2 models (IDM-VTON + SDXL) ----
+    # Use stamps to avoid repeating snapshots
+    try:
+        # IDM-VTON Space ckpt subtree
+        name = "idm_vton_ckpt"
+        if not stamp(name).exists():
+            space_dir = BASE_MODELS_DIR / "_tmp_idm_space"
+            download_repo_snapshot("spaces/yisol/IDM-VTON", space_dir)
+            src = space_dir / "ckpt"
+            dst = BASE_MODELS_DIR / "idm_vton" / "ckpt"
+            if src.exists():
+                dst.mkdir(parents=True, exist_ok=True)
+                for item in src.rglob("*"):
+                    if item.is_file():
+                        rel = item.relative_to(src)
+                        (dst / rel).parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(item, dst / rel)
+            shutil.rmtree(space_dir, ignore_errors=True)
+            stamp(name).touch()
+            print("[models] IDM-VTON ckpt fetched")
+        else:
+            print("[models] IDM-VTON ckpt: already stamped")
+
+        # SDXL inpaint and refiner
+        for repo, subdir, mark in [
+            ("diffusers/stable-diffusion-xl-1.0-inpainting-0.1", BASE_MODELS_DIR / "sdxl-inpaint", "sdxl_inpaint"),
+            ("stabilityai/stable-diffusion-xl-refiner-1.0", BASE_MODELS_DIR / "sdxl-refiner", "sdxl_refiner"),
+            ("thibaud/controlnet-openpose-sdxl-1.0", BASE_MODELS_DIR / "controlnets/openpose-sdxl", "cn_openpose_sdxl"),
+            ("SargeZT/controlnet-sd-xl-1.0-softedge-dexined", BASE_MODELS_DIR / "controlnets/softedge-sdxl", "cn_softedge_sdxl"),
+            ("yzd-v/DWPose", BASE_MODELS_DIR / "dwpose", "dwpose_pack"),
+            ("h94/IP-Adapter", BASE_MODELS_DIR / "ip_adapter", "ip_adapter"),
+        ]:
+            if not stamp(mark).exists():
+                download_repo_snapshot(repo, subdir)
+                stamp(mark).touch()
+                print(f"[models] snapshot: {repo} -> {subdir}")
+            else:
+                print(f"[models] snapshot: {repo} already cached")
+
+        # Optional InstantID
+        enable_instantid = os.environ.get("ENABLE_INSTANTID", "0") in {"1","true","True"}
+        if enable_instantid:
+            if not stamp("instantid").exists():
+                download_repo_snapshot("InstantX/InstantID", BASE_MODELS_DIR / "instantid")
+                stamp("instantid").touch()
+                print("[models] InstantID snapshot cached")
+            else:
+                print("[models] InstantID already cached")
+    except Exception as exc:  # pylint: disable=broad-except
+        print(f"[models][warning] V2 model snapshot failed: {exc}")
 
 
 if __name__ == "__main__":
