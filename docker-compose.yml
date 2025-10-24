@@ -18,12 +18,13 @@ services:
       - TRYON_OUTPUTS_DIR=/app/api/outputs
       - TRYON_UPLOADS_DIR=/app/api/uploads
       - TRYON_MODELS_DIR=/models
-      - DOWNLOAD_MODELS_ON_START=${DOWNLOAD_MODELS_ON_START:-1}
+      - DOWNLOAD_MODELS_ON_START=1
       # Persist ML caches in the mounted /models volume so weights
       # (e.g., torchvision resnet/deeplab) are not re-downloaded
       - TORCH_HOME=${TORCH_HOME:-/models/torch}
       - HF_HOME=${HF_HOME:-/models/hf}
       - HUGGINGFACE_HUB_CACHE=${HUGGINGFACE_HUB_CACHE:-/models/hf}
+      - PYTHONPATH=/app
       - SD15_MODEL_DIR=${SD15_MODEL_DIR:-/models/sd15}
       - SD15_MODEL_ID=${SD15_MODEL_ID:-runwayml/stable-diffusion-v1-5}
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility

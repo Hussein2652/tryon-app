@@ -44,6 +44,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     fi
 
 COPY api /app/api
+COPY server /app/server
 COPY scripts /app/scripts
 RUN chmod +x /app/scripts/entrypoint.sh
 

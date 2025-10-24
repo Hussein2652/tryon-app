@@ -6,6 +6,10 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      "/api": {
+        target: "http://api:8008",
+        changeOrigin: true
+      },
       "/size": {
         target: "http://api:8008",
         changeOrigin: true

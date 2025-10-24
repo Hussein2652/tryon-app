@@ -180,10 +180,29 @@ class TryOnV2Engine:
         y_bot = int(h * 0.88)
         draw.rectangle([(int(w*0.22), y_top), (int(w*0.78), y_bot)], fill=255)
 
-        # Pose/edge placeholders (black); ControlNets still load. You can replace
-        # with real maps from DW-Pose/SoftEdge if desired.
+        # Build control images: OpenPose (skeleton) and SoftEdge (edges)
         pose = Image.new("RGB", (w, h), (0, 0, 0))
         edge = Image.new("RGB", (w, h), (0, 0, 0))
+        try:
+            from controlnet_aux.open_pose import OpenposeDetector  # type: ignore
+            op = OpenposeDetector.from_pretrained("lllyasviel/ControlNet")
+            pose = op(person.convert("RGB")).convert("RGB")
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("OpenPose control image failed; using blank. %s", exc)
+        try:
+            # Soft edge approximation via PidiNet; falls back to Canny if unavailable
+            from controlnet_aux import PidiNetDetector  # type: ignore
+            pidi = PidiNetDetector.from_pretrained("lllyasviel/Annotators")
+            edge = pidi(person.convert("RGB"), safe=True).convert("RGB")
+        except Exception:
+            try:
+                import cv2  # type: ignore
+                import numpy as np
+                arr = np.array(person.convert("RGB"))
+                can = cv2.Canny(arr, 100, 200)
+                edge = Image.fromarray(can).convert("RGB")
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.warning("Edge control image failed; using blank. %s", exc)
 
         # Simple composited init (cloth pasted on torso) to help inpainting
         init = self._composite(person, cloth)

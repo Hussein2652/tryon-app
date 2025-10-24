@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, useMemo, useState } from "react";
-import { recommendSize, requestTryOn, requestTryOnCompare, deleteTryOn, SizeRecommendPayload } from "./api";
+import { recommendSize, requestTryOn, requestTryOnCompare, deleteTryOn, requestTryOnV2, SizeRecommendPayload } from "./api";
 
 const DEFAULT_SIZE_PAYLOAD: SizeRecommendPayload = {
   brand_id: "ACME",
@@ -43,6 +43,8 @@ export default function App() {
   const [tryOnLoading, setTryOnLoading] = useState(false);
   const [tryOnIssues, setTryOnIssues] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState<boolean>(false);
+  const [useV2, setUseV2] = useState<boolean>(false);
+  const [v2ImageUrl, setV2ImageUrl] = useState<string | null>(null);
 
   const poses = useMemo(() => tryOnResult?.images ?? [], [tryOnResult]);
 
@@ -69,25 +71,39 @@ export default function App() {
     setTryOnLoading(true);
     setTryOnIssues(null);
     try {
-      const formData = new FormData();
-      formData.append("user_photo", userFile);
-      formData.append("garment_front", garmentFile);
-      if (garmentMask) formData.append("garment_mask", garmentMask);
-      formData.append("sku", "SKU123");
-      const recommended = (sizeResult as any)?.recommended_size ?? "M";
-      formData.append("size", String(recommended));
-      formData.append("diffusion_steps", String(steps));
-      formData.append("diffusion_guidance", String(guidance));
-      formData.append("diffusion_strength", String(strength));
-      formData.append("diffusion_safety", String(safety));
-      formData.append("debug_layers", String(showDebug));
-      const data = await requestTryOn(formData);
-      setTryOnResult({
-        cacheKey: data.cache_key,
-        images: data.images,
-        confidence: data.confidence_avg,
-        frameScores: data.frame_scores
-      });
+      if (useV2) {
+        const formV2 = new FormData();
+        formV2.append("person", userFile);
+        formV2.append("cloth", garmentFile);
+        formV2.append("category", "upper_body");
+        formV2.append("steps", String(Math.max(1, Math.round(steps))));
+        formV2.append("guidance", String(guidance));
+        formV2.append("seed", String(42));
+        const url = await requestTryOnV2(formV2);
+        setV2ImageUrl(url);
+        setTryOnResult(null);
+      } else {
+        const formData = new FormData();
+        formData.append("user_photo", userFile);
+        formData.append("garment_front", garmentFile);
+        if (garmentMask) formData.append("garment_mask", garmentMask);
+        formData.append("sku", "SKU123");
+        const recommended = (sizeResult as any)?.recommended_size ?? "M";
+        formData.append("size", String(recommended));
+        formData.append("diffusion_steps", String(steps));
+        formData.append("diffusion_guidance", String(guidance));
+        formData.append("diffusion_strength", String(strength));
+        formData.append("diffusion_safety", String(safety));
+        formData.append("debug_layers", String(showDebug));
+        const data = await requestTryOn(formData);
+        setV2ImageUrl(null);
+        setTryOnResult({
+          cacheKey: data.cache_key,
+          images: data.images,
+          confidence: data.confidence_avg,
+          frameScores: data.frame_scores
+        });
+      }
     } catch (error: any) {
       const detail = error?.response?.data?.detail;
       if (Array.isArray(detail)) {
@@ -255,6 +271,11 @@ export default function App() {
             <input type="file" accept="image/png" onChange={bindGarmentMask} />
           </label>
           <label>
+            Use v2 (IDM‑VTON/SDXL)
+            <input type="checkbox" checked={useV2}
+                   onChange={(e) => setUseV2(e.target.checked)} />
+          </label>
+          <label>
             Steps
             <input type="number" min={5} max={80} value={steps}
                    onChange={(e) => setSteps(Number(e.target.value))} />
@@ -284,6 +305,14 @@ export default function App() {
           </button>
         </form>
         {tryOnIssues && <div className="issues">{tryOnIssues}</div>}
+        {v2ImageUrl && (
+          <div>
+            <p>v2 result (single image)</p>
+            <div className="poses">
+              <div className="pose-card"><img src={v2ImageUrl} alt="try-on v2" /></div>
+            </div>
+          </div>
+        )}
         {tryOnResult && (
           <div>
             <p>

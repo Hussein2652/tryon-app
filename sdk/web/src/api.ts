@@ -57,3 +57,13 @@ export async function requestTryOnCompare(formData: FormData): Promise<TryOnComp
   });
   return response.data;
 }
+
+// V2 returns a single PNG image. This helper returns an object URL for display.
+export async function requestTryOnV2(formData: FormData): Promise<string> {
+  const response = await axios.post("/api/v2/tryon", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+    responseType: "blob"
+  });
+  const blobUrl = URL.createObjectURL(response.data);
+  return blobUrl;
+}
