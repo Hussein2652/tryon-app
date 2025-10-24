@@ -37,7 +37,6 @@ services:
       - NVIDIA_VISIBLE_DEVICES=all
     ports:
       - "8008:8008"
-      - "8000:8000"
     volumes:
       - ./outputs:/app/api/outputs
       - ./uploads:/app/api/uploads

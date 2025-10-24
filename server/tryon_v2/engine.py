@@ -86,29 +86,50 @@ class TryOnV2Engine:
         third_party = Path("/third_party/idm_vton") if Path("/third_party/idm_vton").exists() else Path("/app/third_party/idm_vton")
         if not third_party.exists():
             raise RuntimeError("IDM-VTON repo not present.")
-        # Try to import a gradio demo callable
-        import sys
+        # Try to import the exact Gradio demo entrypoint: gradio_demo/app.py
+        import sys, importlib.util, os
         sys.path.insert(0, str(third_party))
         try:
-            # Popular entrypoints in demos: app.py / gradio_app.py
-            candidates = [
-                ("app", ("predict", "inference", "process")),
-                ("gradio_app", ("predict", "inference", "process")),
+            module_path = third_party / "gradio_demo" / "app.py"
+            if not module_path.exists():
+                raise RuntimeError("gradio_demo/app.py not found in IDM-VTON repo")
+
+            spec = importlib.util.spec_from_file_location("idm_vton_gradio_app", str(module_path))
+            if spec is None or spec.loader is None:
+                raise RuntimeError("Unable to load IDM-VTON gradio module")
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)  # type: ignore[arg-type]
+
+            # Export ckpt dir env for the demo (common pattern)
+            os.environ.setdefault("IDM_VTON_CKPT_DIR", str(ckpt))
+
+            # Preferred callable order: process, predict
+            fn = None
+            for name in ("process", "predict"):
+                if hasattr(mod, name):
+                    fn = getattr(mod, name)
+                    break
+            if fn is None:
+                raise RuntimeError("IDM-VTON gradio callable not found (process/predict)")
+
+            # Attempt multiple kwarg schemes to match various commits
+            variants = [
+                dict(person_image=person, cloth_image=cloth, category=category, steps=steps, guidance=guidance, seed=seed),
+                dict(human_img=person, cloth_img=cloth, category=category, steps=steps, cfg=guidance, seed=seed),
+                dict(im=person, c=cloth, cate=category, num_steps=steps, cfg_scale=guidance, seed=seed),
             ]
-            for mod_name, fn_names in candidates:
+            for kwargs in variants:
                 try:
-                    mod = __import__(mod_name)
-                    for fn in fn_names:
-                        if hasattr(mod, fn):
-                            callable_fn = getattr(mod, fn)
-                            # Convert PIL to bytes/args as needed. Many demos accept PIL directly.
-                            out = callable_fn(person, cloth, category, steps, guidance, seed)
-                            if isinstance(out, Image.Image):
-                                return out
-                except Exception:
+                    allowed = {k: v for k, v in kwargs.items() if k in getattr(fn, "__code__").co_varnames}
+                    out = fn(**allowed)
+                    if isinstance(out, Image.Image):
+                        return out
+                    if isinstance(out, (list, tuple)) and out and isinstance(out[0], Image.Image):
+                        return out[0]
+                except Exception as exc:
+                    logger.debug("IDM-VTON call variant failed: %s", exc)
                     continue
-            # Fallback: if demo callable not found, raise to trigger SDXL path
-            raise RuntimeError("IDM-VTON gradio callable not found")
+            raise RuntimeError("IDM-VTON callable invocation failed for all variants")
         finally:
             try:
                 sys.path.remove(str(third_party))

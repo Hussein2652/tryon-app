@@ -51,7 +51,7 @@ RUN if [ "$DOWNLOAD_MODELS" = "true" ]; then \
         python /app/scripts/download_models.py || echo "Model download script ended with non-zero status" ; \
     fi
 
-EXPOSE 8008 8000
+EXPOSE 8008
 
 WORKDIR /app/api
 
