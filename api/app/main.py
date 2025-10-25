@@ -205,7 +205,7 @@ async def tryon_v2(
     cloth: UploadFile = File(...),
     category: str = Form(default="upper_body"),
     steps: int = Form(default=30),
-    guidance: float = Form(default=5.0),
+    guidance: float = Form(default=2.0),
     seed: int = Form(default=42),
 ):
     person_bytes = await person.read()

@@ -45,6 +45,13 @@ export default function App() {
   const [showDebug, setShowDebug] = useState<boolean>(false);
   const [useV2, setUseV2] = useState<boolean>(false);
   const [v2ImageUrl, setV2ImageUrl] = useState<string | null>(null);
+  const onToggleV2 = (checked: boolean) => {
+    setUseV2(checked);
+    if (checked) {
+      setSteps(30);
+      setGuidance(2.0);
+    }
+  };
 
   const poses = useMemo(() => tryOnResult?.images ?? [], [tryOnResult]);
 
@@ -273,7 +280,7 @@ export default function App() {
           <label>
             Use v2 (IDM‑VTON/SDXL)
             <input type="checkbox" checked={useV2}
-                   onChange={(e) => setUseV2(e.target.checked)} />
+                   onChange={(e) => onToggleV2(e.target.checked)} />
           </label>
           <label>
             Steps
@@ -282,19 +289,23 @@ export default function App() {
           </label>
           <label>
             Guidance
-            <input type="number" step={0.1} min={3} max={12} value={guidance}
+            <input type="number" step={0.1} min={0.5} max={12} value={guidance}
                    onChange={(e) => setGuidance(Number(e.target.value))} />
           </label>
-          <label>
-            Strength
-            <input type="number" step={0.01} min={0.05} max={0.9} value={strength}
-                   onChange={(e) => setStrength(Number(e.target.value))} />
-          </label>
-          <label>
-            Safety Checker
-            <input type="checkbox" checked={safety}
-                   onChange={(e) => setSafety(e.target.checked)} />
-          </label>
+          {!useV2 && (
+            <>
+              <label>
+                Strength
+                <input type="number" step={0.01} min={0.05} max={0.9} value={strength}
+                       onChange={(e) => setStrength(Number(e.target.value))} />
+              </label>
+              <label>
+                Safety Checker
+                <input type="checkbox" checked={safety}
+                       onChange={(e) => setSafety(e.target.checked)} />
+              </label>
+            </>
+          )}
           <label>
             Show pose/mask overlays
             <input type="checkbox" checked={showDebug}
