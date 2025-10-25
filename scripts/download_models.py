@@ -325,18 +325,32 @@ def main() -> None:
         if not stamp(name).exists():
             space_dir = BASE_MODELS_DIR / "_tmp_idm_space"
             download_repo_snapshot("yisol/IDM-VTON", space_dir, repo_type="space")
-            src = space_dir / "ckpt"
             dst = BASE_MODELS_DIR / "idm_vton" / "ckpt"
-            if src.exists():
-                dst.mkdir(parents=True, exist_ok=True)
-                for item in src.rglob("*"):
-                    if item.is_file():
-                        rel = item.relative_to(src)
-                        (dst / rel).parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(item, dst / rel)
+            dst.mkdir(parents=True, exist_ok=True)
+            # Search for expected files anywhere in Space snapshot and normalize layout
+            mapping = {
+                "humanparsing/parsing_atr.onnx": "parsing_atr.onnx",
+                "humanparsing/parsing_lip.onnx": "parsing_lip.onnx",
+                "densepose/model_final_162be9.pkl": "model_final_162be9.pkl",
+                "openpose/ckpts/body_pose_model.pth": "body_pose_model.pth",
+            }
+            found = 0
+            for rel_path, fname in mapping.items():
+                matches = list(space_dir.rglob(fname))
+                if matches:
+                    src_file = matches[0]
+                    out_file = dst / rel_path
+                    out_file.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src_file, out_file)
+                    found += 1
+                else:
+                    print(f"[models][warning] IDM-VTON ckpt missing {fname} in Space snapshot")
             shutil.rmtree(space_dir, ignore_errors=True)
-            stamp(name).touch()
-            print("[models] IDM-VTON ckpt fetched")
+            if found == len(mapping):
+                stamp(name).touch()
+                print("[models] IDM-VTON ckpt fetched and normalized")
+            else:
+                print(f"[models][warning] IDM-VTON ckpt incomplete ({found}/{len(mapping)})")
         else:
             print("[models] IDM-VTON ckpt: already stamped")
 

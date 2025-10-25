@@ -15,3 +15,6 @@ models/instantid/
 models/schp/
 models/hf/
 models/torch/
+models/sdxl-inpaint/
+models/idm_vton/
+models/_download_stamps/
