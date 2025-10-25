@@ -18,3 +18,4 @@ models/torch/
 models/sdxl-inpaint/
 models/idm_vton/
 models/_download_stamps/
+third_party/

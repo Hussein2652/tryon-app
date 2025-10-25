@@ -42,6 +42,8 @@ services:
       - ./outputs:/app/api/outputs
       - ./uploads:/app/api/uploads
       - ./models:/models
+      # Persist cloned third-party repos (e.g., IDM-VTON) across restarts
+      - ./third_party:/third_party
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;print(urllib.request.urlopen('http://localhost:8008/healthz').read().decode())"]
       interval: 20s

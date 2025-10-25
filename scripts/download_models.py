@@ -307,10 +307,11 @@ def main() -> None:
     # ---- V2 models (IDM-VTON + SDXL) ----
     # Use stamps to avoid repeating snapshots
     try:
-        # Clone IDM-VTON repo once (code lives under /third_party)
+        # Ensure IDM-VTON repo exists at runtime (stamp alone is not enough because
+        # the repo path under /third_party is not persisted across container restarts).
         repo_stamp = stamp("idm_vton_repo")
         repo_dir = Path("/third_party/idm_vton")
-        if not repo_stamp.exists():
+        if not repo_dir.exists():
             repo_dir.parent.mkdir(parents=True, exist_ok=True)
             try:
                 subprocess.run(["git", "clone", "--depth", "1", "https://github.com/yisol/IDM-VTON", str(repo_dir)], check=True)
@@ -319,7 +320,9 @@ def main() -> None:
             except Exception as exc:  # pylint: disable=broad-except
                 print(f"[models][warning] Could not clone IDM-VTON repo: {exc}")
         else:
-            print("[models] IDM-VTON repo already cloned (stamp present)")
+            if not repo_stamp.exists():
+                repo_stamp.touch()
+            print("[models] IDM-VTON repo present at /third_party/idm_vton")
         # IDM-VTON Space ckpt subtree
         name = "idm_vton_ckpt"
         if not stamp(name).exists():
