@@ -18,4 +18,5 @@ models/torch/
 models/sdxl-inpaint/
 models/idm_vton/
 models/_download_stamps/
+models/sdxl-refiner/
 third_party/
