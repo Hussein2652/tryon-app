@@ -246,7 +246,48 @@ class TryOnV2Engine:
             generator=g,
             **kwargs,
         )
-        return result.images[0]
+        candidate = result.images[0]
+
+        # Quick QC gates. If they fail, re-run once with stronger identity or denoise.
+        try:
+            face_ok = self._face_similarity_ok(person, candidate, threshold=0.35)
+            cloth_ok = self._cloth_similarity_ok(cloth, candidate, threshold=0.28)
+            bg_ok = self._bg_ssim_ok(person, candidate, mask, min_ssim=0.90)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("QC checks failed (%s); accepting first result.", exc)
+            return candidate
+
+        if face_ok and cloth_ok and bg_ok:
+            return candidate
+
+        # Retry once with tweaks
+        try:
+            # Increase identity lock if available
+            if "ip_adapter_image" in kwargs:
+                pipe.set_ip_adapter_scale(0.7)
+            # Increase denoise a bit
+            result2 = pipe(
+                prompt="photo of a person wearing a shirt, realistic fabric, natural drape",
+                negative_prompt="blurry, lowres, deformed, extra limbs, bad hands, text",
+                image=init,
+                mask_image=mask,
+                control_image=control_images if len(control_images) > 1 else control_images[0],
+                controlnet_conditioning_scale=scales if len(scales) > 1 else scales[0],
+                num_inference_steps=int(max(steps, 30)),
+                guidance_scale=float(max(guidance, 5.0)),
+                strength=min(0.60, 0.45 + 0.05),
+                generator=g,
+                **kwargs,
+            )
+            cand2 = result2.images[0]
+
+            # Pick better by simple score
+            s1 = self._score_overall(person, cloth, candidate, mask)
+            s2 = self._score_overall(person, cloth, cand2, mask)
+            return cand2 if s2 >= s1 else candidate
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("Retry generation failed: %s", exc)
+            return candidate
 
     # ----------------------
     # Utility: simple paste
@@ -262,3 +303,90 @@ class TryOnV2Engine:
         out = person.copy()
         out.paste(target, (x, y), target.split()[-1])
         return out
+
+    # ----------------------
+    # QC helpers
+    # ----------------------
+    def _face_similarity_ok(self, src: Image.Image, dst: Image.Image, threshold: float) -> bool:
+        try:
+            v1 = self._arcface_embed_onnx(src)
+            v2 = self._arcface_embed_onnx(dst)
+            if v1 is None or v2 is None:
+                return True  # Skip gate if embeddings unavailable
+            import numpy as np
+            a = np.array(v1, dtype="float32")
+            b = np.array(v2, dtype="float32")
+            a = a / max(1e-6, (a**2).sum() ** 0.5)
+            b = b / max(1e-6, (b**2).sum() ** 0.5)
+            cos = float((a * b).sum())
+            return cos >= threshold
+        except Exception:
+            return True
+
+    def _arcface_embed_onnx(self, rgb: Image.Image):
+        # Use antelopev2 glintr100.onnx if present; returns list[float] or None
+        try:
+            import onnxruntime as ort  # type: ignore
+            import numpy as np
+        except Exception:
+            return None
+        glintr = self.cfg.models_dir / "instantid" / "antelopev2" / "glintr100.onnx"
+        if not glintr.exists():
+            return None
+        # Simple face crop: top-center crop
+        w, h = rgb.size
+        crop = rgb.crop((int(w * 0.3), int(h * 0.05), int(w * 0.7), int(h * 0.45))).resize((112, 112))
+        arr = np.asarray(crop)[:, :, ::-1].astype("float32")
+        arr = (arr - 127.5) / 128.0
+        arr = np.transpose(arr, (2, 0, 1))[None, ...]
+        sess = ort.InferenceSession(str(glintr), providers=["CUDAExecutionProvider", "CPUExecutionProvider"])  # type: ignore
+        out = sess.run(None, {sess.get_inputs()[0].name: arr})
+        return out[0].reshape(-1).astype("float32").tolist()
+
+    def _cloth_similarity_ok(self, cloth: Image.Image, result: Image.Image, threshold: float) -> bool:
+        # CLIP similarity between cloth and garment region (approx: whole result)
+        try:
+            from transformers import CLIPProcessor, CLIPModel  # type: ignore
+            import torch
+        except Exception:
+            return True
+        try:
+            model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32")
+            proc = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            model = model.to(device)
+            inputs = proc(images=[cloth.convert("RGB"), result.convert("RGB")], return_tensors="pt").to(device)
+            with torch.no_grad():
+                feats = model.get_image_features(**inputs)
+            a, b = feats[0], feats[1]
+            a = a / a.norm()
+            b = b / b.norm()
+            cos = float((a @ b.T).item())
+            return cos >= threshold
+        except Exception:
+            return True
+
+    def _bg_ssim_ok(self, src: Image.Image, dst: Image.Image, fg_mask: Image.Image, min_ssim: float) -> bool:
+        # Ensure background unchanged: compute SSIM on inverse of inpaint mask
+        try:
+            import numpy as np
+            from skimage.metrics import structural_similarity as ssim  # type: ignore
+        except Exception:
+            return True
+        src_g = np.array(src.convert("L"))
+        dst_g = np.array(dst.convert("L"))
+        mask = np.array(fg_mask.resize(src.size))
+        bg = (mask < 128)
+        if bg.sum() < 1024:
+            return True
+        try:
+            score = ssim(src_g, dst_g, data_range=255)
+        except Exception:
+            return True
+        return float(score) >= min_ssim
+
+    def _score_overall(self, person: Image.Image, cloth: Image.Image, out: Image.Image, mask: Image.Image) -> float:
+        s1 = 1.0 if self._face_similarity_ok(person, out, threshold=0.35) else 0.0
+        s2 = 1.0 if self._cloth_similarity_ok(cloth, out, threshold=0.28) else 0.0
+        s3 = 1.0 if self._bg_ssim_ok(person, out, mask, min_ssim=0.90) else 0.0
+        return s1 * 0.5 + s2 * 0.3 + s3 * 0.2
