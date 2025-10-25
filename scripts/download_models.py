@@ -79,17 +79,35 @@ def download_with_hf(repo_id: str, filename: str, destination: Path) -> None:
     shutil.copy2(cached, destination)
 
 
-def download_repo_snapshot(repo_id: str, destination: Path) -> None:
+def download_repo_snapshot(repo_id: str, destination: Path, repo_type: Optional[str] = None) -> None:
+    """Snapshot a HF repo to destination.
+
+    Supports Spaces via repo_type="space". If the caller passes a repo_id in the
+    form "spaces/<namespace>/<repo>", we normalize to "<namespace>/<repo>" and set
+    repo_type automatically.
+    """
     if snapshot_download is None:
         raise RuntimeError("huggingface_hub is not installed")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    snapshot_download(
-        repo_id=repo_id,
+
+    rid = repo_id
+    rtype = repo_type
+    if repo_id.startswith("spaces/"):
+        parts = repo_id.split("/", 2)
+        if len(parts) == 3:
+            rid = f"{parts[1]}/{parts[2]}"
+            rtype = rtype or "space"
+
+    kwargs = dict(
+        repo_id=rid,
         local_dir=destination,
         local_dir_use_symlinks=False,
         resume_download=True,
         max_workers=4,
     )
+    if rtype:
+        kwargs["repo_type"] = rtype
+    snapshot_download(**kwargs)
 
 
 def stamp(name: str) -> Path:
@@ -306,7 +324,7 @@ def main() -> None:
         name = "idm_vton_ckpt"
         if not stamp(name).exists():
             space_dir = BASE_MODELS_DIR / "_tmp_idm_space"
-            download_repo_snapshot("spaces/yisol/IDM-VTON", space_dir)
+            download_repo_snapshot("yisol/IDM-VTON", space_dir, repo_type="space")
             src = space_dir / "ckpt"
             dst = BASE_MODELS_DIR / "idm_vton" / "ckpt"
             if src.exists():
