@@ -6,7 +6,7 @@ services:
       args:
         BASE_IMAGE: ${BASE_IMAGE:-pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime}
         INSTALL_ML_DEPS: "${INSTALL_ML_DEPS:-true}"
-        DOWNLOAD_MODELS: "${DOWNLOAD_MODELS:-false}"
+        DOWNLOAD_MODELS: "${DOWNLOAD_MODELS:-true}"
         STABLEVITON_SHAREPOINT_URL: ${STABLEVITON_SHAREPOINT_URL}
         CONTROLNET_OPENPOSE_URL: ${CONTROLNET_OPENPOSE_URL}
         SCHP_DRIVE_URL: ${SCHP_DRIVE_URL}
@@ -18,7 +18,7 @@ services:
       - TRYON_OUTPUTS_DIR=/app/api/outputs
       - TRYON_UPLOADS_DIR=/app/api/uploads
       - TRYON_MODELS_DIR=/models
-      - DOWNLOAD_MODELS_ON_START=1
+      - DOWNLOAD_MODELS_ON_START=${DOWNLOAD_MODELS_ON_START:-0}
       # Persist ML caches in the mounted /models volume so weights
       # (e.g., torchvision resnet/deeplab) are not re-downloaded
       - TORCH_HOME=${TORCH_HOME:-/models/torch}
@@ -35,6 +35,13 @@ services:
       - HUGGINGFACE_HUB_TOKEN
       - HF_TOKEN=${HF_TOKEN:-}
       - ENABLE_INSTANTID=${ENABLE_INSTANTID:-0}
+      - IDM_VTON_SELF_HEAL=${IDM_VTON_SELF_HEAL:-0}
+      - IDM_VTON_FULL_DEPS=${IDM_VTON_FULL_DEPS:-0}
+      - IDM_VTON_ISOLATE=${IDM_VTON_ISOLATE:-0}
+      - IDM_VTON_RECREATE=${IDM_VTON_RECREATE:-0}
+      - IDM_VTON_DISABLE_VENV=${IDM_VTON_DISABLE_VENV:-1}
+      - HF_HUB_DISABLE_PROGRESS_BARS=1
+      - HF_HUB_OFFLINE=${HF_HUB_OFFLINE:-0}
       - NVIDIA_VISIBLE_DEVICES=all
     ports:
       - "8008:8008"
@@ -49,6 +56,7 @@ services:
       interval: 20s
       timeout: 5s
       retries: 5
+      start_period: 120s
     deploy:
       resources:
         reservations:

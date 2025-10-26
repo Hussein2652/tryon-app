@@ -19,4 +19,9 @@ models/sdxl-inpaint/
 models/idm_vton/
 models/_download_stamps/
 models/sdxl-refiner/
+models/controlnets/
+models/dwpose/
+models/ip_adapter/
+models/_downloads.log
+models/_downloads.pid
 third_party/

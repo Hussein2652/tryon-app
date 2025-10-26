@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, List
 import os
+import sys
+import shutil
 import subprocess
 import tempfile
 
@@ -89,11 +91,38 @@ class TryOnV2Engine:
         repo_root = Path("/third_party/idm_vton")
         if not repo_root.exists():
             raise RuntimeError("IDM-VTON repo not present.")
-        # Prefer isolated venv execution to avoid dependency conflicts with API env
-        venv_python = Path("/third_party/.venv_idm/bin/python")
+        # Run under the same interpreter as the API container so deps match the image
+        venv_python = Path(sys.executable)
         runner = Path("/app/server/tryon_v2/idm_runner.py")
-        if not venv_python.exists() or not runner.exists():
-            raise RuntimeError("IDM-VTON venv runner not available.")
+        if not runner.exists():
+            raise RuntimeError("IDM-VTON runner not available.")
+
+        # Sync IDM-VTON ckpts from models dir into the repo tree if needed.
+        # The IDM code loads from repo_root/ckpt, not from our models dir.
+        try:
+            src_ckpt = self.cfg.models_dir / "idm_vton" / "ckpt"
+            dst_ckpt = repo_root / "ckpt"
+            if src_ckpt.exists():
+                for root, _, files in os.walk(src_ckpt):
+                    for name in files:
+                        s = Path(root) / name
+                        r = s.relative_to(src_ckpt)
+                        d = dst_ckpt / r
+                        try:
+                            if (not d.exists()) or d.stat().st_size != s.stat().st_size:
+                                d.parent.mkdir(parents=True, exist_ok=True)
+                                # Replace corrupt or placeholder files (e.g., 25-byte ONNX) with valid ones
+                                if d.exists():
+                                    try:
+                                        d.unlink()
+                                    except Exception:
+                                        pass
+                                shutil.copy2(s, d)
+                        except Exception:
+                            # best-effort; continue syncing others
+                            pass
+        except Exception:
+            pass
 
         # Prepare temp files
         with tempfile.TemporaryDirectory() as td:

@@ -68,6 +68,48 @@ else:
 
 app.mount("/outputs", StaticFiles(directory=OUTPUTS_DIR), name="outputs")
 
+# ----------------------
+# Downloads monitor
+# ----------------------
+_DOWNLOADS_LOG = app_config.MODELS_BASE_DIR / "_downloads.log"
+_DOWNLOADS_PID = app_config.MODELS_BASE_DIR / "_downloads.pid"
+
+
+def _read_log_tail(path: Path, max_lines: int = 200) -> list[str]:
+    try:
+        data = path.read_text(errors="ignore").splitlines()
+        return data[-max_lines:]
+    except Exception:
+        return []
+
+
+@app.get("/downloads/status")
+async def downloads_status(n: int = 40):
+    running = False
+    pid = None
+    try:
+        if _DOWNLOADS_PID.exists():
+            pid_txt = _DOWNLOADS_PID.read_text().strip()
+            pid = int(pid_txt) if pid_txt.isdigit() else None
+            # simple liveness check via procfs; best-effort
+            if pid is not None and Path(f"/proc/{pid}").exists():
+                running = True
+    except Exception:
+        pass
+    lines = _read_log_tail(_DOWNLOADS_LOG, max_lines=max(1, min(n, 500)))
+    return {
+        "running": running,
+        "pid": pid,
+        "log_tail": lines,
+        "log_path": str(_DOWNLOADS_LOG),
+    }
+
+
+@app.get("/downloads/log")
+async def downloads_log(n: int = 200):
+    lines = _read_log_tail(_DOWNLOADS_LOG, max_lines=max(1, min(n, 1000)))
+    return JSONResponse(status_code=status.HTTP_200_OK, content={"lines": lines})
+
 
 @app.middleware("http")
 async def log_and_measure_requests(request: Request, call_next):
